@@ -106,10 +106,10 @@ export function SiteNavigation({
         <Link
           href="/portfolio"
           aria-current={isPortfolioPage ? "page" : undefined}
-          className={`relative inline-flex items-center justify-center px-[clamp(14px,1.4vw,22px)] py-[clamp(7px,0.6vw,10px)] text-[clamp(9px,0.7vw,11px)] font-medium tracking-[0.22em] uppercase border transition-all duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/80 ${
+          className={`relative inline-flex items-center justify-center py-2 text-[clamp(9.5px,0.72vw,11.5px)] font-medium tracking-[0.22em] uppercase transition-colors duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/80 ${
             isPortfolioPage
-              ? "border-[#ff2a2a]/80 bg-[#ff2a2a]/15 text-white shadow-[0_0_18px_rgba(255,35,35,0.28)]"
-              : "border-white/20 bg-white/[0.03] text-white/90 hover:border-[#ff2a2a]/70 hover:bg-[#ff2a2a]/10 hover:text-white hover:shadow-[0_0_16px_rgba(255,35,35,0.22)]"
+              ? "text-white"
+              : "text-white/80 hover:text-white"
           }`}
         >
           <span>PORTFOLIO</span>
@@ -118,7 +118,7 @@ export function SiteNavigation({
             className={`ml-2 w-1.5 h-1.5 rounded-full transition-all duration-300 ${
               isPortfolioPage
                 ? "bg-[#ff3b3b] shadow-[0_0_8px_2px_rgba(255,35,35,0.95)]"
-                : "bg-[#ff2a2a]/75"
+                : "bg-[#ff2a2a]/80 shadow-[0_0_6px_1px_rgba(255,35,35,0.6)]"
             }`}
           />
         </Link>

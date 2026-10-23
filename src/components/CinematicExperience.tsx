@@ -30,7 +30,7 @@ const SECTION_SCROLL_ANCHORS: Record<SectionId, number> = {
 };
 
 function getSectionFromProgress(progress: number): SectionId {
-  if (progress < 0.195) return "home";
+  if (progress < 0.16) return "home";
   if (progress < 0.445) return "skills";
   if (progress < 0.705) return "work";
   if (progress < 0.875) return "about";
@@ -63,8 +63,7 @@ export function CinematicExperience() {
   const progressContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Frame sequence scrubbing state refs (no React re-renders on scroll frames)
-  const targetProgressRef = useRef<number>(0);
-  const smoothedProgressRef = useRef<number>(0);
+  const currentProgressRef = useRef<number>(0);
   const lastDrawnFrameRef = useRef<number>(-1);
   const imagesRef = useRef<(HTMLImageElement | null)[]>(
     new Array(TOTAL_FRAMES).fill(null)
@@ -76,6 +75,9 @@ export function CinematicExperience() {
     if (!canvas) return;
     const ctx2d = canvas.getContext("2d", { alpha: false });
     if (!ctx2d) return;
+
+    ctx2d.imageSmoothingEnabled = true;
+    ctx2d.imageSmoothingQuality = "high";
 
     const images = imagesRef.current;
     let img = images[desiredIndex];
@@ -120,7 +122,7 @@ export function CinematicExperience() {
   }, []);
 
   // Smooth navigation to any section in the pinned master timeline
-  const scrollToSection = useCallback((section: SectionId) => {
+  const scrollToSection = useCallback((section: SectionId, instant = false) => {
     const st = scrollTriggerRef.current;
     const anchor = SECTION_SCROLL_ANCHORS[section];
 
@@ -130,14 +132,14 @@ export function CinematicExperience() {
     }
 
     if (!st) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: instant ? "instant" : "smooth" });
       return;
     }
 
     const targetScrollY = st.start + (st.end - st.start) * anchor;
     window.scrollTo({
       top: targetScrollY,
-      behavior: "smooth",
+      behavior: instant ? "instant" : "smooth",
     });
   }, []);
 
@@ -168,7 +170,7 @@ export function CinematicExperience() {
         lastDrawnFrameRef.current = -1;
         const currentFrame = Math.min(
           TOTAL_FRAMES - 1,
-          Math.max(0, Math.round(smoothedProgressRef.current * (TOTAL_FRAMES - 1)))
+          Math.max(0, Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1)))
         );
         drawFrameToCanvas(currentFrame);
       }
@@ -177,10 +179,7 @@ export function CinematicExperience() {
     updateCanvasSize();
     window.addEventListener("resize", updateCanvasSize);
 
-    // Progressive, prioritized preloader for the 300 frames:
-    // Tier 1: Keyframes every 10 frames (0, 10, 20, ...) for instant full-range scrubbing
-    // Tier 2: Even frames (2, 4, 6, ...)
-    // Tier 3: Remaining odd frames (1, 3, 5, ...)
+    // Progressive, prioritized preloader for the 300 frames
     let isCancelled = false;
     const buildLoadOrder = (): number[] => {
       const seen = new Set<number>();
@@ -213,9 +212,9 @@ export function CinematicExperience() {
         imagesRef.current[frameIndex] = img;
         const currentTargetFrame = Math.min(
           TOTAL_FRAMES - 1,
-          Math.max(0, Math.round(smoothedProgressRef.current * (TOTAL_FRAMES - 1)))
+          Math.max(0, Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1)))
         );
-        if (Math.abs(frameIndex - currentTargetFrame) <= 8) {
+        if (Math.abs(frameIndex - currentTargetFrame) <= 6) {
           lastDrawnFrameRef.current = -1;
           drawFrameToCanvas(currentTargetFrame);
         }
@@ -234,31 +233,8 @@ export function CinematicExperience() {
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
-    // Subtle entrance animation for the preserved Home hero on initial load
+    // Master timeline normalized from t = 0 to t = 100
     const ctx = gsap.context(() => {
-      if (!prefersReducedMotion) {
-        gsap.fromTo(
-          [
-            homeEl.querySelector('[data-hero="eyebrow-text"]'),
-            homeEl.querySelector('[data-hero="eyebrow-line"]'),
-            homeEl.querySelector('[data-hero="wordmark"]'),
-            homeEl.querySelector('[data-hero="tagline"]'),
-            ...Array.from(homeEl.querySelectorAll('[data-hero="desc-line"]')),
-            homeEl.querySelector('[data-hero="cta"]'),
-          ],
-          { opacity: 0, y: 12 },
-          {
-            opacity: 1,
-            y: 0,
-            duration: 0.75,
-            stagger: 0.06,
-            ease: "power2.out",
-            overwrite: "auto",
-          }
-        );
-      }
-
-      // Master timeline normalized from t = 0 to t = 100
       const tl = gsap.timeline({
         defaults: { ease: "none" },
         scrollTrigger: {
@@ -266,11 +242,24 @@ export function CinematicExperience() {
           start: "top top",
           end: () => `+=${Math.round(window.innerHeight * 6.5)}`,
           pin: true,
-          scrub: prefersReducedMotion ? false : 0.45,
+          scrub: prefersReducedMotion ? false : 0.35,
           anticipatePin: 1,
+          snap: {
+            snapTo: [0, 0.31, 0.57, 0.8, 0.985],
+            duration: { min: 0.22, max: 0.5 },
+            delay: 0.1,
+            ease: "power2.out",
+          },
           onUpdate: (self) => {
             const p = self.progress;
-            targetProgressRef.current = p;
+            currentProgressRef.current = p;
+
+            // Direct synchronized canvas frame render (1:1 lockstep with scroll)
+            const targetFrame = Math.min(
+              TOTAL_FRAMES - 1,
+              Math.max(0, Math.round(p * (TOTAL_FRAMES - 1)))
+            );
+            drawFrameToCanvas(targetFrame);
 
             // Update right-edge progress bar without React state re-render
             if (progressFillRef.current) {
@@ -299,20 +288,20 @@ export function CinematicExperience() {
       // PHASE A — HOME (t: 0 -> 19, Frames 1 -> 57)
       // Initial state at t=0: Pure #000000 black background, preserved Hero intact.
       // t: 0 -> 7: Black curtain gradually opens to reveal the crimson portal scene behind the hero.
-      // t: 8 -> 19: Camera pushes into the portal vortex; Hero elements recede in staggered order.
+      // t: 8 -> 18: Camera pushes into the portal vortex; Hero elements recede in staggered order.
       // =======================================================================
       tl.fromTo(
         heroBlackCurtainRef.current,
         { opacity: 1 },
-        { opacity: 0.14, duration: 7.5, ease: "power1.inOut" },
+        { opacity: 0.14, duration: 7, ease: "power1.inOut" },
         0.2
       );
 
       if (canvas) {
         tl.fromTo(
           canvas,
-          { scale: 1.03, filter: "brightness(0.88)" },
-          { scale: 1.0, filter: "brightness(1)", duration: 8, ease: "sine.out" },
+          { scale: 1.02, filter: "brightness(0.9)" },
+          { scale: 1.0, filter: "brightness(1)", duration: 7, ease: "sine.out" },
           0
         );
       }
@@ -325,51 +314,62 @@ export function CinematicExperience() {
       const heroCta = homeEl.querySelector('[data-hero="cta"]');
       const heroContainer = homeEl.querySelector('[data-hero="container"]');
 
-      tl.to(
+      tl.fromTo(
         [heroEyebrowText, heroEyebrowLine],
-        { yPercent: -110, opacity: 0, duration: 5, ease: "power2.in" },
-        9
+        { yPercent: 0, opacity: 1 },
+        { yPercent: -100, opacity: 0, duration: 4.5, ease: "power2.in" },
+        8
       )
-        .to(
+        .fromTo(
           heroWordmark,
+          { y: 0, scale: 1, opacity: 1, filter: "blur(0px)" },
           {
-            y: -26,
-            scale: 1.03,
+            y: -22,
+            scale: 1.02,
             opacity: 0,
             filter: "blur(6px)",
-            duration: 6.5,
+            duration: 5.5,
+            ease: "power2.in",
+          },
+          8.5
+        )
+        .fromTo(
+          heroTagline,
+          { yPercent: 0, opacity: 1 },
+          { yPercent: -100, opacity: 0, duration: 5, ease: "power2.in" },
+          9.5
+        )
+        .fromTo(
+          heroDescLines,
+          { yPercent: 0, opacity: 1 },
+          {
+            yPercent: -100,
+            opacity: 0,
+            stagger: 0.35,
+            duration: 4.5,
             ease: "power2.in",
           },
           10
         )
-        .to(
-          heroTagline,
-          { yPercent: -115, opacity: 0, duration: 5.5, ease: "power2.in" },
+        .fromTo(
+          heroCta,
+          { yPercent: 0, opacity: 1 },
+          { yPercent: -100, opacity: 0, duration: 4.5, ease: "power2.in" },
           11
         )
-        .to(
-          heroDescLines,
-          {
-            yPercent: -110,
-            opacity: 0,
-            stagger: 0.5,
-            duration: 4.5,
-            ease: "power2.in",
-          },
-          11.5
-        )
-        .to(
-          heroCta,
-          { yPercent: -110, opacity: 0, duration: 4.5, ease: "power2.in" },
-          12.5
-        )
-        .to(
+        .fromTo(
           heroContainer,
-          { y: -18, duration: 9, ease: "sine.inOut" },
-          9
+          { y: 0 },
+          { y: -16, duration: 8, ease: "sine.inOut" },
+          8
         )
-        .set(homeEl, { pointerEvents: "none" }, 18)
-        .set(homeEl, { pointerEvents: "auto" }, 0);
+        // Ensure entire Home section container is strictly hidden when transitioning to subsequent scenes
+        .fromTo(
+          homeEl,
+          { autoAlpha: 1, pointerEvents: "auto" },
+          { autoAlpha: 0, pointerEvents: "none", duration: 3.5, ease: "power1.in" },
+          14.5
+        );
 
       // =======================================================================
       // PHASE B — SKILLS (t: 20 -> 44, Frames 60 -> 132 — Futuristic Android)
@@ -784,23 +784,50 @@ export function CinematicExperience() {
         );
     }, wrapper);
 
-    // High-efficiency 300-frame canvas render loop
-    let rafId = 0;
-    const tickFrameScrub = () => {
-      const targetP = targetProgressRef.current;
-      const diff = targetP - smoothedProgressRef.current;
-      smoothedProgressRef.current += diff * 0.28;
+    // Enforce 1-page-at-a-time navigation on mobile touch devices
+    const SECTIONS: SectionId[] = ["home", "skills", "work", "about", "contact"];
+    let touchStartY = 0;
+    let touchStartX = 0;
+    let isTouchNavigating = false;
 
-      const frameIndex = Math.min(
-        TOTAL_FRAMES - 1,
-        Math.max(0, Math.round(smoothedProgressRef.current * (TOTAL_FRAMES - 1)))
-      );
-      drawFrameToCanvas(frameIndex);
-
-      rafId = window.requestAnimationFrame(tickFrameScrub);
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      touchStartY = e.touches[0].clientY;
+      touchStartX = e.touches[0].clientX;
     };
 
-    rafId = window.requestAnimationFrame(tickFrameScrub);
+    const onTouchMove = (e: TouchEvent) => {
+      if (isTouchNavigating || e.touches.length !== 1) return;
+      const currentY = e.touches[0].clientY;
+      const currentX = e.touches[0].clientX;
+      const diffY = currentY - touchStartY;
+      const diffX = currentX - touchStartX;
+
+      // Vertical swipe detection threshold
+      if (Math.abs(diffY) > 30 && Math.abs(diffY) > Math.abs(diffX) * 1.2) {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        isTouchNavigating = true;
+
+        const currentSec = activeSectionRef.current;
+        const currentIdx = SECTIONS.indexOf(currentSec);
+        const direction = diffY < 0 ? 1 : -1;
+        const targetIdx = Math.max(
+          0,
+          Math.min(SECTIONS.length - 1, currentIdx + direction)
+        );
+
+        scrollToSection(SECTIONS[targetIdx]);
+
+        window.setTimeout(() => {
+          isTouchNavigating = false;
+        }, 750);
+      }
+    };
+
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
 
     // Handle initial URL hash if user visits /#work, /#skills, etc.
     const initialHash = window.location.hash.replace("#", "") as SectionId;
@@ -809,15 +836,16 @@ export function CinematicExperience() {
       initialHash !== "home" &&
       initialHash in SECTION_SCROLL_ANCHORS
     ) {
-      window.setTimeout(() => {
-        scrollToSection(initialHash);
-      }, 150);
+      scrollToSection(initialHash, true);
+    } else {
+      drawFrameToCanvas(0);
     }
 
     return () => {
       isCancelled = true;
-      window.cancelAnimationFrame(rafId);
       window.removeEventListener("resize", updateCanvasSize);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
       ctx.revert();
     };
   }, [drawFrameToCanvas, scrollToSection]);
