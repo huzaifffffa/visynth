@@ -49,8 +49,6 @@ export function CinematicExperience() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const scrollTriggerRef = useRef<ScrollTrigger | null>(null);
   const masterTimelineRef = useRef<gsap.core.Timeline | null>(null);
-  const isMobileRef = useRef<boolean>(false);
-  const isNavigatingRef = useRef<boolean>(false);
 
   // Atmospheric overlay refs
   const heroBlackCurtainRef = useRef<HTMLDivElement | null>(null);
@@ -127,7 +125,7 @@ export function CinematicExperience() {
     ctx2d.drawImage(img, dx, dy, dw, dh);
   }, []);
 
-  // Smooth navigation to any section across Desktop & Mobile
+  // Smooth navigation to any section across all devices
   const scrollToSection = useCallback(
     (section: SectionId, instant = false) => {
       activeSectionRef.current = section;
@@ -140,52 +138,10 @@ export function CinematicExperience() {
 
       const anchor = SECTION_SCROLL_ANCHORS[section];
       const tl = masterTimelineRef.current;
-
-      // Mobile Mode: Drive timeline directly without 650vh document scroll
-      if (isMobileRef.current && tl) {
-        if (instant) {
-          tl.progress(anchor);
-          currentProgressRef.current = anchor;
-          drawFrameToCanvas(Math.round(anchor * (TOTAL_FRAMES - 1)));
-          if (progressFillRef.current) {
-            progressFillRef.current.style.transform = `scaleY(${anchor})`;
-          }
-          if (progressContainerRef.current) {
-            progressContainerRef.current.style.opacity =
-              anchor > 0.015 ? "1" : "0";
-          }
-        } else {
-          isNavigatingRef.current = true;
-          gsap.to(tl, {
-            progress: anchor,
-            duration: 0.75,
-            ease: "power2.inOut",
-            overwrite: "auto",
-            onUpdate: () => {
-              const p = tl.progress();
-              currentProgressRef.current = p;
-              drawFrameToCanvas(Math.round(p * (TOTAL_FRAMES - 1)));
-              if (progressFillRef.current) {
-                progressFillRef.current.style.transform = `scaleY(${p})`;
-              }
-              if (progressContainerRef.current) {
-                progressContainerRef.current.style.opacity =
-                  p > 0.015 ? "1" : "0";
-              }
-            },
-            onComplete: () => {
-              window.setTimeout(() => {
-                isNavigatingRef.current = false;
-              }, 120);
-            },
-          });
-        }
-        return;
-      }
-
-      // Desktop Mode: Scroll via ScrollTrigger
       const st = scrollTriggerRef.current;
+
       if (!st) {
+        if (tl) tl.progress(anchor);
         window.scrollTo({ top: 0, behavior: instant ? "instant" : "smooth" });
         return;
       }
@@ -226,19 +182,6 @@ export function CinematicExperience() {
     if (!wrapper || !homeEl || !skillsEl || !workEl || !aboutEl || !contactEl) {
       return;
     }
-
-    const checkMobile = () => {
-      const isMob =
-        typeof window !== "undefined" &&
-        (window.innerWidth <= 768 ||
-          window.matchMedia("(max-width: 768px)").matches ||
-          window.matchMedia("(pointer: coarse)").matches ||
-          navigator.maxTouchPoints > 0 ||
-          "ontouchstart" in window);
-      isMobileRef.current = isMob;
-      return isMob;
-    };
-    const isMobile = checkMobile();
 
     // Handle responsive canvas sizing
     const updateCanvasSize = () => {
@@ -325,53 +268,48 @@ export function CinematicExperience() {
     const ctx = gsap.context(() => {
       const tl = gsap.timeline({
         defaults: { ease: "none" },
-        paused: isMobile,
       });
 
       masterTimelineRef.current = tl;
 
-      if (!isMobile) {
-        const st = ScrollTrigger.create({
-          trigger: wrapper,
-          start: "top top",
-          end: () => `+=${Math.round(window.innerHeight * 6.5)}`,
-          pin: true,
-          scrub: prefersReducedMotion ? false : 0.25,
-          anticipatePin: 1,
-          animation: tl,
-          onUpdate: (self) => {
-            const p = self.progress;
-            currentProgressRef.current = p;
+      const st = ScrollTrigger.create({
+        trigger: wrapper,
+        start: "top top",
+        end: () => `+=${Math.round(window.innerHeight * 8.0)}`,
+        pin: true,
+        scrub: prefersReducedMotion ? false : 0.35,
+        anticipatePin: 1,
+        animation: tl,
+        onUpdate: (self) => {
+          const p = self.progress;
+          currentProgressRef.current = p;
 
-            // Direct synchronized canvas frame render (1:1 lockstep with scroll)
-            const targetFrame = Math.min(
-              TOTAL_FRAMES - 1,
-              Math.max(0, Math.round(p * (TOTAL_FRAMES - 1)))
-            );
-            drawFrameToCanvas(targetFrame);
+          // Direct synchronized canvas frame render (1:1 lockstep with scroll)
+          const targetFrame = Math.min(
+            TOTAL_FRAMES - 1,
+            Math.max(0, Math.round(p * (TOTAL_FRAMES - 1)))
+          );
+          drawFrameToCanvas(targetFrame);
 
-            // Update right-edge progress bar without React state re-render
-            if (progressFillRef.current) {
-              progressFillRef.current.style.transform = `scaleY(${p})`;
-            }
-            if (progressContainerRef.current) {
-              progressContainerRef.current.style.opacity =
-                p > 0.015 ? "1" : "0";
-            }
+          // Update right-edge progress bar without React state re-render
+          if (progressFillRef.current) {
+            progressFillRef.current.style.transform = `scaleY(${p})`;
+          }
+          if (progressContainerRef.current) {
+            progressContainerRef.current.style.opacity =
+              p > 0.015 ? "1" : "0";
+          }
 
-            // Update active navigation item only when crossing section boundary
-            const nextSec = getSectionFromProgress(p);
-            if (nextSec !== activeSectionRef.current) {
-              activeSectionRef.current = nextSec;
-              setActiveSection(nextSec);
-            }
-          },
-        });
+          // Update active navigation item only when crossing section boundary
+          const nextSec = getSectionFromProgress(p);
+          if (nextSec !== activeSectionRef.current) {
+            activeSectionRef.current = nextSec;
+            setActiveSection(nextSec);
+          }
+        },
+      });
 
-        scrollTriggerRef.current = st;
-      } else {
-        scrollTriggerRef.current = null;
-      }
+      scrollTriggerRef.current = st;
 
       // Placeholder duration span so timeline explicitly runs from 0 to 100
       tl.to({}, { duration: 100 }, 0);
@@ -876,45 +814,60 @@ export function CinematicExperience() {
         );
     }, wrapper);
 
-    // Mobile discrete 1-page-at-a-time controller (strictly locked during transition)
-    let observer: Observer | null = null;
-    if (isMobile) {
-      observer = Observer.create({
-        target: window,
-        type: "wheel,touch,pointer",
-        tolerance: 20,
-        preventDefault: true,
-        onPress: (self) => {
-          if (self.event && self.event.cancelable) {
-            self.event.preventDefault();
-          }
-        },
-        onUp: () => {
-          if (isNavigatingRef.current) return;
-          const currentIdx = SECTIONS.indexOf(activeSectionRef.current);
-          if (currentIdx < SECTIONS.length - 1) {
-            const nextIdx = currentIdx + 1;
-            scrollToSection(SECTIONS[nextIdx]);
-          }
-        },
-        onDown: () => {
-          if (isNavigatingRef.current) return;
-          const currentIdx = SECTIONS.indexOf(activeSectionRef.current);
-          if (currentIdx > 0) {
-            const prevIdx = currentIdx - 1;
-            scrollToSection(SECTIONS[prevIdx]);
-          }
-        },
+    // Continuous cursor drag & touch swipe scrubber aligned 1:1 with movement
+    let isDragging = false;
+    let startY = 0;
+    let startScrollY = 0;
+
+    const onPointerDown = (e: PointerEvent) => {
+      // Don't intercept clicks on links, buttons, inputs or form elements
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        typeof target.closest === "function" &&
+        (target.closest("a") ||
+          target.closest("button") ||
+          target.closest("input") ||
+          target.closest("textarea") ||
+          target.closest("form") ||
+          target.closest("nav") ||
+          target.closest('[data-drag-ignore="true"]'))
+      ) {
+        return;
+      }
+      isDragging = true;
+      startY = e.clientY;
+      startScrollY = window.scrollY;
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!isDragging) return;
+      const deltaY = startY - e.clientY;
+      const st = scrollTriggerRef.current;
+      if (!st) return;
+      const totalDist = st.end - st.start;
+      // Moving 1 viewport height advances ~0.25 of progress (1 smooth section transition)
+      const scrollDelta = (deltaY / Math.max(window.innerHeight, 500)) * (totalDist * 0.25);
+      window.scrollTo({
+        top: Math.max(0, Math.min(st.end, startScrollY + scrollDelta)),
+        behavior: "instant",
       });
-    }
+    };
+
+    const onPointerUp = () => {
+      isDragging = false;
+    };
+
+    window.addEventListener("pointerdown", onPointerDown, { passive: true });
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("pointerup", onPointerUp, { passive: true });
+    window.addEventListener("pointercancel", onPointerUp, { passive: true });
 
     // Handle initial URL hash and in-page hashchange
     const handleHashNavigation = (instant = true) => {
       const hash = window.location.hash.replace("#", "") as SectionId;
       if (hash && hash !== "home" && hash in SECTION_SCROLL_ANCHORS) {
-        if (!isMobile) {
-          ScrollTrigger.refresh();
-        }
+        ScrollTrigger.refresh();
         scrollToSection(hash, instant);
       } else if (!hash || hash === "home") {
         scrollToSection("home", instant);
@@ -929,7 +882,10 @@ export function CinematicExperience() {
       isCancelled = true;
       window.removeEventListener("resize", updateCanvasSize);
       window.removeEventListener("hashchange", onHashChange);
-      if (observer) observer.kill();
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
       if (scrollTriggerRef.current) scrollTriggerRef.current.kill();
       ctx.revert();
     };
