@@ -50,7 +50,7 @@ export function ContactSection({
       ref={sectionRef}
       id="contact"
       aria-label="Contact"
-      className="absolute inset-0 z-20 flex flex-col justify-between w-full h-full pt-[clamp(64px,5.6vw,90px)] pl-[5.95%] pr-[5.95%] opacity-0 pointer-events-none select-none"
+      className="absolute inset-0 z-20 flex flex-col justify-between w-full h-full pt-[clamp(64px,5.6vw,90px)] pl-[5.95%] pr-[5.95%] opacity-0 pointer-events-none select-none invisible"
     >
       <div className="flex-1 flex items-center w-full py-8">
         <div

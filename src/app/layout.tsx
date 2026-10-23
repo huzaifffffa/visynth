@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Montserrat } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
@@ -8,6 +8,12 @@ const montserrat = Montserrat({
   subsets: ["latin"],
   weight: ["200", "300", "400", "500", "600", "700"],
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
 
 export const metadata: Metadata = {
   title: "VISYNTH — Creative Technology Studio",

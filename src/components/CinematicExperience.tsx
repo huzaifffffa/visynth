@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { Observer } from "gsap/Observer";
 import { SectionId, SiteNavigation } from "./SiteNavigation";
 import { ScrollProgressIndicator } from "./ScrollProgressIndicator";
 import { HeroSection } from "./HeroSection";
@@ -19,6 +20,8 @@ function getFrameSrc(indexZeroBased: number): string {
   ).padStart(3, "0");
   return `/frames/frame_${num}.webp`;
 }
+
+const SECTIONS: SectionId[] = ["home", "skills", "work", "about", "contact"];
 
 // Target normalized scroll progress anchors (0..1) for direct section navigation
 const SECTION_SCROLL_ANCHORS: Record<SectionId, number> = {
@@ -45,6 +48,9 @@ export function CinematicExperience() {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const scrollTriggerRef = useRef<ScrollTrigger | null>(null);
+  const masterTimelineRef = useRef<gsap.core.Timeline | null>(null);
+  const isMobileRef = useRef<boolean>(false);
+  const isNavigatingRef = useRef<boolean>(false);
 
   // Atmospheric overlay refs
   const heroBlackCurtainRef = useRef<HTMLDivElement | null>(null);
@@ -121,30 +127,93 @@ export function CinematicExperience() {
     ctx2d.drawImage(img, dx, dy, dw, dh);
   }, []);
 
-  // Smooth navigation to any section in the pinned master timeline
-  const scrollToSection = useCallback((section: SectionId, instant = false) => {
-    const st = scrollTriggerRef.current;
-    const anchor = SECTION_SCROLL_ANCHORS[section];
+  // Smooth navigation to any section across Desktop & Mobile
+  const scrollToSection = useCallback(
+    (section: SectionId, instant = false) => {
+      activeSectionRef.current = section;
+      setActiveSection(section);
 
-    if (typeof window !== "undefined") {
-      const hash = section === "home" ? window.location.pathname : `#${section}`;
-      window.history.replaceState(null, "", hash);
-    }
+      if (typeof window !== "undefined") {
+        const hash = section === "home" ? window.location.pathname : `#${section}`;
+        window.history.replaceState(null, "", hash);
+      }
 
-    if (!st) {
-      window.scrollTo({ top: 0, behavior: instant ? "instant" : "smooth" });
-      return;
-    }
+      const anchor = SECTION_SCROLL_ANCHORS[section];
+      const tl = masterTimelineRef.current;
 
-    const targetScrollY = st.start + (st.end - st.start) * anchor;
-    window.scrollTo({
-      top: targetScrollY,
-      behavior: instant ? "instant" : "smooth",
-    });
-  }, []);
+      // Mobile Mode: Drive timeline directly without 650vh document scroll
+      if (isMobileRef.current && tl) {
+        if (instant) {
+          tl.progress(anchor);
+          currentProgressRef.current = anchor;
+          drawFrameToCanvas(Math.round(anchor * (TOTAL_FRAMES - 1)));
+          if (progressFillRef.current) {
+            progressFillRef.current.style.transform = `scaleY(${anchor})`;
+          }
+          if (progressContainerRef.current) {
+            progressContainerRef.current.style.opacity =
+              anchor > 0.015 ? "1" : "0";
+          }
+        } else {
+          isNavigatingRef.current = true;
+          gsap.to(tl, {
+            progress: anchor,
+            duration: 0.75,
+            ease: "power2.inOut",
+            overwrite: "auto",
+            onUpdate: () => {
+              const p = tl.progress();
+              currentProgressRef.current = p;
+              drawFrameToCanvas(Math.round(p * (TOTAL_FRAMES - 1)));
+              if (progressFillRef.current) {
+                progressFillRef.current.style.transform = `scaleY(${p})`;
+              }
+              if (progressContainerRef.current) {
+                progressContainerRef.current.style.opacity =
+                  p > 0.015 ? "1" : "0";
+              }
+            },
+            onComplete: () => {
+              window.setTimeout(() => {
+                isNavigatingRef.current = false;
+              }, 120);
+            },
+          });
+        }
+        return;
+      }
+
+      // Desktop Mode: Scroll via ScrollTrigger
+      const st = scrollTriggerRef.current;
+      if (!st) {
+        window.scrollTo({ top: 0, behavior: instant ? "instant" : "smooth" });
+        return;
+      }
+
+      if (st.end <= st.start) {
+        st.refresh();
+      }
+
+      if (instant && tl) {
+        tl.progress(anchor);
+        currentProgressRef.current = anchor;
+        drawFrameToCanvas(Math.round(anchor * (TOTAL_FRAMES - 1)));
+      }
+
+      const targetScrollY = st.start + (st.end - st.start) * anchor;
+      window.scrollTo({
+        top: targetScrollY,
+        behavior: instant ? "instant" : "smooth",
+      });
+      if (instant) {
+        ScrollTrigger.update();
+      }
+    },
+    [drawFrameToCanvas]
+  );
 
   useEffect(() => {
-    gsap.registerPlugin(ScrollTrigger);
+    gsap.registerPlugin(ScrollTrigger, Observer);
 
     const canvas = canvasRef.current;
     const wrapper = wrapperRef.current;
@@ -158,6 +227,19 @@ export function CinematicExperience() {
       return;
     }
 
+    const checkMobile = () => {
+      const isMob =
+        typeof window !== "undefined" &&
+        (window.innerWidth <= 768 ||
+          window.matchMedia("(max-width: 768px)").matches ||
+          window.matchMedia("(pointer: coarse)").matches ||
+          navigator.maxTouchPoints > 0 ||
+          "ontouchstart" in window);
+      isMobileRef.current = isMob;
+      return isMob;
+    };
+    const isMobile = checkMobile();
+
     // Handle responsive canvas sizing
     const updateCanvasSize = () => {
       if (!canvas) return;
@@ -170,7 +252,10 @@ export function CinematicExperience() {
         lastDrawnFrameRef.current = -1;
         const currentFrame = Math.min(
           TOTAL_FRAMES - 1,
-          Math.max(0, Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1)))
+          Math.max(
+            0,
+            Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1))
+          )
         );
         drawFrameToCanvas(currentFrame);
       }
@@ -212,7 +297,10 @@ export function CinematicExperience() {
         imagesRef.current[frameIndex] = img;
         const currentTargetFrame = Math.min(
           TOTAL_FRAMES - 1,
-          Math.max(0, Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1)))
+          Math.max(
+            0,
+            Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1))
+          )
         );
         if (Math.abs(frameIndex - currentTargetFrame) <= 6) {
           lastDrawnFrameRef.current = -1;
@@ -237,19 +325,20 @@ export function CinematicExperience() {
     const ctx = gsap.context(() => {
       const tl = gsap.timeline({
         defaults: { ease: "none" },
-        scrollTrigger: {
+        paused: isMobile,
+      });
+
+      masterTimelineRef.current = tl;
+
+      if (!isMobile) {
+        const st = ScrollTrigger.create({
           trigger: wrapper,
           start: "top top",
           end: () => `+=${Math.round(window.innerHeight * 6.5)}`,
           pin: true,
-          scrub: prefersReducedMotion ? false : 0.35,
+          scrub: prefersReducedMotion ? false : 0.25,
           anticipatePin: 1,
-          snap: {
-            snapTo: [0, 0.31, 0.57, 0.8, 0.985],
-            duration: { min: 0.22, max: 0.5 },
-            delay: 0.1,
-            ease: "power2.out",
-          },
+          animation: tl,
           onUpdate: (self) => {
             const p = self.progress;
             currentProgressRef.current = p;
@@ -266,7 +355,8 @@ export function CinematicExperience() {
               progressFillRef.current.style.transform = `scaleY(${p})`;
             }
             if (progressContainerRef.current) {
-              progressContainerRef.current.style.opacity = p > 0.015 ? "1" : "0";
+              progressContainerRef.current.style.opacity =
+                p > 0.015 ? "1" : "0";
             }
 
             // Update active navigation item only when crossing section boundary
@@ -276,10 +366,12 @@ export function CinematicExperience() {
               setActiveSection(nextSec);
             }
           },
-        },
-      });
+        });
 
-      scrollTriggerRef.current = tl.scrollTrigger ?? null;
+        scrollTriggerRef.current = st;
+      } else {
+        scrollTriggerRef.current = null;
+      }
 
       // Placeholder duration span so timeline explicitly runs from 0 to 100
       tl.to({}, { duration: 100 }, 0);
@@ -317,8 +409,8 @@ export function CinematicExperience() {
       tl.fromTo(
         [heroEyebrowText, heroEyebrowLine],
         { yPercent: 0, opacity: 1 },
-        { yPercent: -100, opacity: 0, duration: 4.5, ease: "power2.in" },
-        8
+        { yPercent: -100, opacity: 0, duration: 3.5, ease: "power2.in" },
+        12
       )
         .fromTo(
           heroWordmark,
@@ -328,16 +420,16 @@ export function CinematicExperience() {
             scale: 1.02,
             opacity: 0,
             filter: "blur(6px)",
-            duration: 5.5,
+            duration: 3.8,
             ease: "power2.in",
           },
-          8.5
+          12.5
         )
         .fromTo(
           heroTagline,
           { yPercent: 0, opacity: 1 },
-          { yPercent: -100, opacity: 0, duration: 5, ease: "power2.in" },
-          9.5
+          { yPercent: -100, opacity: 0, duration: 3.5, ease: "power2.in" },
+          13
         )
         .fromTo(
           heroDescLines,
@@ -345,30 +437,30 @@ export function CinematicExperience() {
           {
             yPercent: -100,
             opacity: 0,
-            stagger: 0.35,
-            duration: 4.5,
+            stagger: 0.25,
+            duration: 3.5,
             ease: "power2.in",
           },
-          10
+          13.2
         )
         .fromTo(
           heroCta,
           { yPercent: 0, opacity: 1 },
-          { yPercent: -100, opacity: 0, duration: 4.5, ease: "power2.in" },
-          11
+          { yPercent: -100, opacity: 0, duration: 3.2, ease: "power2.in" },
+          13.5
         )
         .fromTo(
           heroContainer,
           { y: 0 },
-          { y: -16, duration: 8, ease: "sine.inOut" },
-          8
+          { y: -16, duration: 6, ease: "sine.inOut" },
+          12
         )
         // Ensure entire Home section container is strictly hidden when transitioning to subsequent scenes
         .fromTo(
           homeEl,
           { autoAlpha: 1, pointerEvents: "auto" },
-          { autoAlpha: 0, pointerEvents: "none", duration: 3.5, ease: "power1.in" },
-          14.5
+          { autoAlpha: 0, pointerEvents: "none", duration: 2, ease: "power1.in" },
+          16.5
         );
 
       // =======================================================================
@@ -391,8 +483,8 @@ export function CinematicExperience() {
 
       tl.fromTo(
         skillsEl,
-        { opacity: 0, pointerEvents: "none" },
-        { opacity: 1, pointerEvents: "auto", duration: 2 },
+        { autoAlpha: 0, pointerEvents: "none" },
+        { autoAlpha: 1, pointerEvents: "auto", duration: 2 },
         20
       )
         .fromTo(
@@ -475,7 +567,7 @@ export function CinematicExperience() {
         )
         .to(
           skillsEl,
-          { opacity: 0, pointerEvents: "none", duration: 1.5 },
+          { autoAlpha: 0, pointerEvents: "none", duration: 1.5 },
           43
         );
 
@@ -504,8 +596,8 @@ export function CinematicExperience() {
       )
         .fromTo(
           workEl,
-          { opacity: 0, pointerEvents: "none" },
-          { opacity: 1, pointerEvents: "auto", duration: 2 },
+          { autoAlpha: 0, pointerEvents: "none" },
+          { autoAlpha: 1, pointerEvents: "auto", duration: 2 },
           45.5
         )
         .fromTo(
@@ -594,7 +686,7 @@ export function CinematicExperience() {
         )
         .to(
           workEl,
-          { opacity: 0, pointerEvents: "none", duration: 1.5 },
+          { autoAlpha: 0, pointerEvents: "none", duration: 1.5 },
           69.5
         )
         .to(
@@ -623,8 +715,8 @@ export function CinematicExperience() {
 
       tl.fromTo(
         aboutEl,
-        { opacity: 0, pointerEvents: "none" },
-        { opacity: 1, pointerEvents: "auto", duration: 2 },
+        { autoAlpha: 0, pointerEvents: "none" },
+        { autoAlpha: 1, pointerEvents: "auto", duration: 2 },
         71.5
       )
         .fromTo(
@@ -713,7 +805,7 @@ export function CinematicExperience() {
         )
         .to(
           aboutEl,
-          { opacity: 0, pointerEvents: "none", duration: 1.5 },
+          { autoAlpha: 0, pointerEvents: "none", duration: 1.5 },
           87.2
         );
 
@@ -741,8 +833,8 @@ export function CinematicExperience() {
       )
         .fromTo(
           contactEl,
-          { opacity: 0, pointerEvents: "none" },
-          { opacity: 1, pointerEvents: "auto", duration: 2 },
+          { autoAlpha: 0, pointerEvents: "none" },
+          { autoAlpha: 1, pointerEvents: "auto", duration: 2 },
           88
         )
         .fromTo(
@@ -784,68 +876,61 @@ export function CinematicExperience() {
         );
     }, wrapper);
 
-    // Enforce 1-page-at-a-time navigation on mobile touch devices
-    const SECTIONS: SectionId[] = ["home", "skills", "work", "about", "contact"];
-    let touchStartY = 0;
-    let touchStartX = 0;
-    let isTouchNavigating = false;
+    // Mobile discrete 1-page-at-a-time controller (strictly locked during transition)
+    let observer: Observer | null = null;
+    if (isMobile) {
+      observer = Observer.create({
+        target: window,
+        type: "wheel,touch,pointer",
+        tolerance: 20,
+        preventDefault: true,
+        onPress: (self) => {
+          if (self.event && self.event.cancelable) {
+            self.event.preventDefault();
+          }
+        },
+        onUp: () => {
+          if (isNavigatingRef.current) return;
+          const currentIdx = SECTIONS.indexOf(activeSectionRef.current);
+          if (currentIdx < SECTIONS.length - 1) {
+            const nextIdx = currentIdx + 1;
+            scrollToSection(SECTIONS[nextIdx]);
+          }
+        },
+        onDown: () => {
+          if (isNavigatingRef.current) return;
+          const currentIdx = SECTIONS.indexOf(activeSectionRef.current);
+          if (currentIdx > 0) {
+            const prevIdx = currentIdx - 1;
+            scrollToSection(SECTIONS[prevIdx]);
+          }
+        },
+      });
+    }
 
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      touchStartY = e.touches[0].clientY;
-      touchStartX = e.touches[0].clientX;
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (isTouchNavigating || e.touches.length !== 1) return;
-      const currentY = e.touches[0].clientY;
-      const currentX = e.touches[0].clientX;
-      const diffY = currentY - touchStartY;
-      const diffX = currentX - touchStartX;
-
-      // Vertical swipe detection threshold
-      if (Math.abs(diffY) > 30 && Math.abs(diffY) > Math.abs(diffX) * 1.2) {
-        if (e.cancelable) {
-          e.preventDefault();
+    // Handle initial URL hash and in-page hashchange
+    const handleHashNavigation = (instant = true) => {
+      const hash = window.location.hash.replace("#", "") as SectionId;
+      if (hash && hash !== "home" && hash in SECTION_SCROLL_ANCHORS) {
+        if (!isMobile) {
+          ScrollTrigger.refresh();
         }
-        isTouchNavigating = true;
-
-        const currentSec = activeSectionRef.current;
-        const currentIdx = SECTIONS.indexOf(currentSec);
-        const direction = diffY < 0 ? 1 : -1;
-        const targetIdx = Math.max(
-          0,
-          Math.min(SECTIONS.length - 1, currentIdx + direction)
-        );
-
-        scrollToSection(SECTIONS[targetIdx]);
-
-        window.setTimeout(() => {
-          isTouchNavigating = false;
-        }, 750);
+        scrollToSection(hash, instant);
+      } else if (!hash || hash === "home") {
+        scrollToSection("home", instant);
       }
     };
 
-    window.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchmove", onTouchMove, { passive: false });
-
-    // Handle initial URL hash if user visits /#work, /#skills, etc.
-    const initialHash = window.location.hash.replace("#", "") as SectionId;
-    if (
-      initialHash &&
-      initialHash !== "home" &&
-      initialHash in SECTION_SCROLL_ANCHORS
-    ) {
-      scrollToSection(initialHash, true);
-    } else {
-      drawFrameToCanvas(0);
-    }
+    handleHashNavigation(true);
+    const onHashChange = () => handleHashNavigation(false);
+    window.addEventListener("hashchange", onHashChange);
 
     return () => {
       isCancelled = true;
       window.removeEventListener("resize", updateCanvasSize);
-      window.removeEventListener("touchstart", onTouchStart);
-      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("hashchange", onHashChange);
+      if (observer) observer.kill();
+      if (scrollTriggerRef.current) scrollTriggerRef.current.kill();
       ctx.revert();
     };
   }, [drawFrameToCanvas, scrollToSection]);

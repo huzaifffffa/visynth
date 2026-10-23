@@ -15,6 +15,7 @@ html {
   background-color: #000000;
   color: #ffffff;
   color-scheme: dark;
+  overscroll-behavior-y: none;
 }
 
 body {
@@ -24,6 +25,7 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+  overscroll-behavior-y: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

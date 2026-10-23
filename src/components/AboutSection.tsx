@@ -31,7 +31,7 @@ export function AboutSection({ sectionRef }: AboutSectionProps) {
       ref={sectionRef}
       id="about"
       aria-label="About"
-      className="absolute inset-0 z-20 flex items-center w-full h-full pt-[clamp(64px,5.6vw,90px)] pl-[5.95%] pr-[5.95%] opacity-0 pointer-events-none select-none"
+      className="absolute inset-0 z-20 flex items-center w-full h-full pt-[clamp(64px,5.6vw,90px)] pl-[5.95%] pr-[5.95%] opacity-0 pointer-events-none select-none invisible"
     >
       <div
         data-about="container"
