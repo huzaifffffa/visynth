@@ -282,19 +282,22 @@ export function PortfolioGallery3D() {
 
   // Measure viewport & reduced motion preference
   useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     const updateViewport = () => {
       setViewportWidth(window.innerWidth);
     };
-    updateViewport();
-
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setPrefersReducedMotion(mq.matches);
     const onMqChange = (e: MediaQueryListEvent) =>
       setPrefersReducedMotion(e.matches);
+
+    const frameId = window.requestAnimationFrame(() => {
+      setViewportWidth(window.innerWidth);
+      setPrefersReducedMotion(mq.matches);
+    });
 
     window.addEventListener("resize", updateViewport);
     mq.addEventListener("change", onMqChange);
     return () => {
+      window.cancelAnimationFrame(frameId);
       window.removeEventListener("resize", updateViewport);
       mq.removeEventListener("change", onMqChange);
     };
@@ -304,8 +307,10 @@ export function PortfolioGallery3D() {
   useEffect(() => {
     const rm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (rm) {
-      setHasEntered(true);
-      return;
+      const frameId = window.requestAnimationFrame(() => {
+        setHasEntered(true);
+      });
+      return () => window.cancelAnimationFrame(frameId);
     }
 
     const ctx = gsap.context(() => {
@@ -568,60 +573,75 @@ export function PortfolioGallery3D() {
                 </span>
               </h1>
 
-              <p className="overflow-hidden text-[clamp(11px,0.92vw,14px)] font-light tracking-[0.015em] text-[#9e9e9e]">
+              <p className="overflow-hidden text-[clamp(11px,0.92vw,14px)] font-light tracking-[0.015em] text-[#b0b0b0] max-w-[65ch]">
                 <span data-portfolio-anim="mask" className="block">
-                  A collection of creative, digital, and visual explorations.
+                  Selected studio work, conceptual explorations, and visual systems developed by VISYNTH across design and creative technology.
                 </span>
               </p>
             </div>
           </div>
 
-          {/* Mobile Horizontal Scrollable Category Filter Bar (< md) */}
-          <div className="md:hidden w-full mt-5 pt-4 border-t border-white/[0.08]">
+          {/* Mobile Horizontal Scrollable Category Filter Bar (< md) with Right-Edge Fade Indicator */}
+          <div className="md:hidden w-full mt-6 pt-4 border-t border-white/[0.08]">
             <div className="flex items-center justify-between mb-2.5">
               <span className="text-[9.5px] font-medium tracking-[0.24em] text-[#8d9199] uppercase">
                 FILTER BY DISCIPLINE
               </span>
-              <span className="text-[9.5px] font-mono tracking-[0.18em] text-[#ff3b3b]">
-                {selectedCategory}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-mono tracking-[0.16em] text-white/40">
+                  SCROLL →
+                </span>
+                <span className="text-[9.5px] font-mono tracking-[0.18em] text-[#ff3b3b]">
+                  {selectedCategory}
+                </span>
+              </div>
             </div>
-            <div
-              role="tablist"
-              aria-label="Filter Portfolio by Discipline"
-              className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar"
-            >
-              {DISCIPLINE_CATEGORIES.map((category) => {
-                const isSelected = selectedCategory === category;
-                return (
-                  <button
-                    key={category}
-                    type="button"
-                    role="tab"
-                    aria-selected={isSelected}
-                    onClick={() => handleCategoryChange(category)}
-                    className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-none text-[10.5px] tracking-[0.14em] uppercase whitespace-nowrap border shrink-0 transition-all duration-300 cursor-pointer focus:outline-none ${
-                      isSelected
-                        ? "border-[#ff2a2a] bg-[#ff2a2a]/15 text-white shadow-[0_0_14px_rgba(255,35,35,0.25)]"
-                        : "border-white/15 bg-white/[0.02] text-white/65 hover:text-white"
-                    }`}
-                  >
-                    <CategoryOutlineIcon
-                      category={category}
-                      className={`w-3.5 h-3.5 ${
-                        isSelected ? "text-[#ff3b3b]" : "text-white/45"
+
+            {/* Scrollable Container with Right-Edge Gradient Fade Cue */}
+            <div className="relative w-full">
+              <div
+                role="tablist"
+                aria-label="Filter Portfolio by Discipline"
+                className="flex items-center gap-2 overflow-x-auto pb-2 pr-10 no-scrollbar scroll-smooth"
+              >
+                {DISCIPLINE_CATEGORIES.map((category) => {
+                  const isSelected = selectedCategory === category;
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      role="tab"
+                      aria-selected={isSelected}
+                      onClick={() => handleCategoryChange(category)}
+                      className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-none text-[10.5px] tracking-[0.14em] uppercase whitespace-nowrap border shrink-0 transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#ff2a2a] ${
+                        isSelected
+                          ? "border-[#ff2a2a] bg-[#ff2a2a]/20 text-white shadow-[0_0_14px_rgba(255,35,35,0.3)]"
+                          : "border-white/15 bg-white/[0.02] text-white/70 hover:text-white"
                       }`}
-                    />
-                    <span>{category}</span>
-                  </button>
-                );
-              })}
+                    >
+                      <CategoryOutlineIcon
+                        category={category}
+                        className={`w-3.5 h-3.5 ${
+                          isSelected ? "text-[#ff3b3b]" : "text-white/45"
+                        }`}
+                      />
+                      <span>{category}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Subtle Right-Edge Fade Indicator */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute right-0 top-0 bottom-2 w-10 bg-gradient-to-l from-[#050505] to-transparent"
+              />
             </div>
           </div>
         </div>
 
         {/* 2. Main 3D Gallery Stage (Isolated Clipping Boundary, Centered in Right Column) */}
-        <div className="w-full flex-1 flex items-center justify-center my-2 overflow-x-clip">
+        <div className="w-full flex-1 flex items-center justify-center my-6 md:my-8 overflow-x-clip">
           {totalItems === 0 ? (
             /* Clean Empty State if a category has no projects */
             <div className="w-full py-20 flex flex-col items-center justify-center text-center border border-white/[0.08] bg-white/[0.01]">
@@ -858,24 +878,50 @@ export function PortfolioGallery3D() {
           )}
         </div>
 
-        {/* 3. Bottom Bar: Active Project Info (Left) + Prev / Counter / Next Controls (Right) */}
-        <div className="w-full pt-4 border-t border-white/[0.09] flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
-          {/* Active Project Category & Title Readout */}
-          <div className="flex flex-col gap-1 items-center sm:items-start text-center sm:text-left">
+        {/* 3. Bottom Bar: Detailed Active Project Info & Prev / Counter / Next Controls */}
+        <div className="w-full pt-5 pb-2 border-t border-white/[0.12] flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 shrink-0">
+          {/* Active Project Details Readout */}
+          <div className="flex flex-col gap-2.5 max-w-[85ch]">
             {activeItem ? (
               <>
-                <div className="flex items-center gap-3">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#ff2a2a] shadow-[0_0_8px_2px_rgba(255,35,35,0.95)]" />
+                <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+                  <span className="w-2 h-2 rounded-full bg-[#ff2a2a] shadow-[0_0_8px_2px_rgba(255,35,35,0.95)]" />
                   <span className="text-[10px] font-mono tracking-[0.22em] uppercase text-white/60">
                     {activeItem.category}
                   </span>
-                  <span className="text-white/25">/</span>
-                  <span className="text-xs sm:text-sm font-normal tracking-[0.04em] text-white">
+                  <span className="text-white/20">/</span>
+                  <span className="text-xs sm:text-sm font-semibold tracking-[0.06em] text-white">
                     {activeItem.title}
                   </span>
+                  <span className="text-[9px] font-mono tracking-[0.16em] uppercase px-2 py-0.5 rounded-xs border border-[#ff2a2a]/40 bg-[#ff2a2a]/10 text-[#ff4d4d]">
+                    {activeItem.projectType}
+                  </span>
                 </div>
-                <p className="text-[11px] font-light text-white/45 max-w-[60ch] line-clamp-1">
-                  {activeItem.description}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-[11px] font-light leading-relaxed">
+                  <div>
+                    <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-white/50 mr-2">
+                      SERVICE:
+                    </span>
+                    <span className="text-white/80">
+                      {activeItem.serviceProvided}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-white/50 mr-2">
+                      DISCIPLINE:
+                    </span>
+                    <span className="text-white/80">
+                      {activeItem.discipline}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-[11.5px] font-light text-white/65 leading-relaxed">
+                  <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-white/50 mr-2">
+                    OBJECTIVE:
+                  </span>
+                  {activeItem.projectObjective}
                 </p>
               </>
             ) : (
@@ -885,28 +931,38 @@ export function PortfolioGallery3D() {
             )}
           </div>
 
-          {/* Prev / Counter / Next Controls */}
-          <div className="flex items-center gap-4">
+          {/* Prev / Counter / Next Controls & Screen Reader Live Region */}
+          <div className="flex items-center gap-4 self-end lg:self-center shrink-0">
+            {/* Screen Reader Live Region for Slide Announcements */}
+            <div className="sr-only" aria-live="polite" aria-atomic="true">
+              {activeItem &&
+                `Showing project ${safeActiveIndex + 1} of ${totalItems}: ${
+                  activeItem.title
+                }, ${activeItem.category}`}
+            </div>
+
             <button
               type="button"
               onClick={goPrev}
               disabled={totalItems <= 1}
               aria-label="Previous portfolio item"
-              className="group inline-flex items-center gap-2.5 px-3.5 py-2 border border-white/15 bg-white/[0.02] hover:border-[#ff2a2a]/70 hover:bg-[#ff2a2a]/10 disabled:opacity-35 disabled:pointer-events-none text-[10px] font-medium tracking-[0.22em] uppercase text-white/85 hover:text-white transition-all cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#ff2a2a]"
+              className="group inline-flex items-center gap-2.5 px-4 py-2.5 border border-white/20 bg-white/[0.03] hover:border-[#ff2a2a]/80 hover:bg-[#ff2a2a]/15 disabled:opacity-35 disabled:pointer-events-none text-[10.5px] font-semibold tracking-[0.22em] uppercase text-white transition-all cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#ff2a2a] rounded-sm"
             >
-              <span className="transition-transform duration-300 group-hover:-translate-x-0.5">
+              <span
+                aria-hidden="true"
+                className="transition-transform duration-300 group-hover:-translate-x-1 text-[#ff2a2a]"
+              >
                 ←
               </span>
               <span>PREV</span>
             </button>
 
             <div
-              aria-live="polite"
-              aria-atomic="true"
-              className="min-w-[68px] text-center font-mono text-xs tracking-[0.24em] text-white/80"
+              aria-hidden="true"
+              className="min-w-[72px] text-center font-mono text-xs tracking-[0.24em] text-white/85 py-1 px-2 border border-white/10 bg-black/60 rounded-sm"
             >
               <span className="text-white font-medium">{formattedIndex}</span>
-              <span className="mx-1.5 text-[#ff2a2a]">/</span>
+              <span className="mx-1 text-[#ff2a2a]">/</span>
               <span className="text-white/50">{formattedTotal}</span>
             </div>
 
@@ -915,10 +971,13 @@ export function PortfolioGallery3D() {
               onClick={goNext}
               disabled={totalItems <= 1}
               aria-label="Next portfolio item"
-              className="group inline-flex items-center gap-2.5 px-3.5 py-2 border border-white/15 bg-white/[0.02] hover:border-[#ff2a2a]/70 hover:bg-[#ff2a2a]/10 disabled:opacity-35 disabled:pointer-events-none text-[10px] font-medium tracking-[0.22em] uppercase text-white/85 hover:text-white transition-all cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#ff2a2a]"
+              className="group inline-flex items-center gap-2.5 px-4 py-2.5 border border-white/20 bg-white/[0.03] hover:border-[#ff2a2a]/80 hover:bg-[#ff2a2a]/15 disabled:opacity-35 disabled:pointer-events-none text-[10.5px] font-semibold tracking-[0.22em] uppercase text-white transition-all cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#ff2a2a] rounded-sm"
             >
               <span>NEXT</span>
-              <span className="transition-transform duration-300 group-hover:translate-x-0.5">
+              <span
+                aria-hidden="true"
+                className="transition-transform duration-300 group-hover:translate-x-1 text-[#ff2a2a]"
+              >
                 →
               </span>
             </button>

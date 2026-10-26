@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { Observer } from "gsap/Observer";
 import { SectionId, SiteNavigation } from "./SiteNavigation";
 import { ScrollProgressIndicator } from "./ScrollProgressIndicator";
 import { HeroSection } from "./HeroSection";
@@ -13,6 +12,17 @@ import { AboutSection } from "./AboutSection";
 import { ContactSection } from "./ContactSection";
 
 const TOTAL_FRAMES = 300;
+const DEFAULT_FRAME_WIDTH = 1280;
+const DEFAULT_FRAME_HEIGHT = 720;
+
+// Frame state constants for deduplicated progressive loading
+const FRAME_UNLOADED = 0;
+const FRAME_LOADING = 1;
+const FRAME_LOADED = 2;
+const FRAME_FAILED = 3;
+
+// Stable keyframe indices used when prefers-reduced-motion is enabled
+const REDUCED_MOTION_KEYFRAMES = [0, 93, 171, 240, 295];
 
 function getFrameSrc(indexZeroBased: number): string {
   const num = String(
@@ -20,8 +30,6 @@ function getFrameSrc(indexZeroBased: number): string {
   ).padStart(3, "0");
   return `/frames/frame_${num}.webp`;
 }
-
-const SECTIONS: SectionId[] = ["home", "skills", "work", "about", "contact"];
 
 // Target normalized scroll progress anchors (0..1) for direct section navigation
 const SECTION_SCROLL_ANCHORS: Record<SectionId, number> = {
@@ -40,6 +48,88 @@ function getSectionFromProgress(progress: number): SectionId {
   return "contact";
 }
 
+interface CropMetrics {
+  cw: number;
+  ch: number;
+  iw: number;
+  ih: number;
+  dx: number;
+  dy: number;
+  dw: number;
+  dh: number;
+}
+
+function computeCoverMetrics(
+  cw: number,
+  ch: number,
+  iw: number,
+  ih: number
+): CropMetrics {
+  const scale = Math.max(cw / iw, ch / ih);
+  const dw = iw * scale;
+  const dh = ih * scale;
+  const dx = (cw - dw) * 0.5;
+  const dy = (ch - dh) * 0.5;
+  return { cw, ch, iw, ih, dx, dy, dw, dh };
+}
+
+interface NavigatorConnection {
+  saveData?: boolean;
+  effectiveType?: string;
+}
+
+function detectDeviceCapabilities() {
+  if (typeof window === "undefined") {
+    return {
+      isMobile: false,
+      isSlowDevice: false,
+      maxDpr: 2,
+      concurrency: 4,
+      smoothingQuality: "medium" as ImageSmoothingQuality,
+    };
+  }
+
+  const isMobile =
+    window.innerWidth < 768 ||
+    window.matchMedia("(pointer: coarse)").matches;
+
+  const nav = window.navigator as Navigator & {
+    deviceMemory?: number;
+    connection?: NavigatorConnection;
+  };
+
+  const cores = nav.hardwareConcurrency || 4;
+  const memory = nav.deviceMemory || 4;
+  const conn = nav.connection;
+  const slowNetwork =
+    Boolean(conn?.saveData) ||
+    conn?.effectiveType === "slow-2g" ||
+    conn?.effectiveType === "2g" ||
+    conn?.effectiveType === "3g";
+
+  const isSlowDevice = slowNetwork || cores <= 2 || memory <= 2;
+
+  const maxDpr = isMobile
+    ? isSlowDevice
+      ? 1.15
+      : 1.5
+    : isSlowDevice
+      ? 1.5
+      : 2.0;
+
+  const concurrency = isSlowDevice ? 2 : isMobile ? 3 : 4;
+  // Hardware single-pass bilinear filtering ("low") prevents multi-pass CPU/Skia mipmap stalls when upscaling 1280x720 frames to 2x DPR
+  const smoothingQuality: ImageSmoothingQuality = "low";
+
+  return {
+    isMobile,
+    isSlowDevice,
+    maxDpr,
+    concurrency,
+    smoothingQuality,
+  };
+}
+
 export function CinematicExperience() {
   const [activeSection, setActiveSection] = useState<SectionId>("home");
   const activeSectionRef = useRef<SectionId>("home");
@@ -47,6 +137,7 @@ export function CinematicExperience() {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const ctx2dRef = useRef<CanvasRenderingContext2D | null>(null);
   const scrollTriggerRef = useRef<ScrollTrigger | null>(null);
   const masterTimelineRef = useRef<gsap.core.Timeline | null>(null);
 
@@ -65,65 +156,138 @@ export function CinematicExperience() {
   // Right-edge progress indicator refs
   const progressFillRef = useRef<HTMLDivElement | null>(null);
   const progressContainerRef = useRef<HTMLDivElement | null>(null);
+  const progressVisibleRef = useRef<boolean>(false);
 
-  // Frame sequence scrubbing state refs (no React re-renders on scroll frames)
+  // Frame sequence scrubbing & RAF batching state refs (zero React re-renders per frame)
   const currentProgressRef = useRef<number>(0);
+  const targetFrameRef = useRef<number>(0);
+  const pendingDrawFrameRef = useRef<number>(0);
+  const drawRafIdRef = useRef<number | null>(null);
   const lastDrawnFrameRef = useRef<number>(-1);
+  const prefersReducedMotionRef = useRef<boolean>(false);
+
   const imagesRef = useRef<(HTMLImageElement | null)[]>(
     new Array(TOTAL_FRAMES).fill(null)
   );
+  const frameStatesRef = useRef<Uint8Array>(new Uint8Array(TOTAL_FRAMES));
+  const wakeLoadersRef = useRef<(() => void) | null>(null);
 
-  // Draw a specific frame (or nearest loaded frame) onto the canvas with object-cover sizing
-  const drawFrameToCanvas = useCallback((desiredIndex: number) => {
+  // Cached canvas dimensions & object-cover crop metrics
+  const cropMetricsRef = useRef<CropMetrics>(
+    computeCoverMetrics(
+      DEFAULT_FRAME_WIDTH,
+      DEFAULT_FRAME_HEIGHT,
+      DEFAULT_FRAME_WIDTH,
+      DEFAULT_FRAME_HEIGHT
+    )
+  );
+  const smoothingQualityRef = useRef<ImageSmoothingQuality>("medium");
+
+  // Internal synchronous draw executed only inside requestAnimationFrame
+  const renderFrameNow = useCallback((desiredIndex: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx2d = canvas.getContext("2d", { alpha: false });
-    if (!ctx2d) return;
 
-    ctx2d.imageSmoothingEnabled = true;
-    ctx2d.imageSmoothingQuality = "high";
+    let ctx2d = ctx2dRef.current;
+    if (!ctx2d) {
+      ctx2d =
+        canvas.getContext("2d", { alpha: false, desynchronized: true }) ||
+        canvas.getContext("2d", { alpha: false });
+      if (!ctx2d) return;
+      ctx2d.imageSmoothingEnabled = true;
+      ctx2d.imageSmoothingQuality = smoothingQualityRef.current;
+      ctx2dRef.current = ctx2d;
+    }
 
     const images = imagesRef.current;
-    let img = images[desiredIndex];
-    let resolvedIndex = desiredIndex;
+    let targetIdx = desiredIndex;
 
-    // Fallback to nearest already-loaded frame if user scrubs ahead of network load
+    // Under prefers-reduced-motion, snap to the nearest section keyframe for a stable backdrop
+    if (prefersReducedMotionRef.current) {
+      let bestKeyframe = REDUCED_MOTION_KEYFRAMES[0];
+      let bestDist = Math.abs(desiredIndex - bestKeyframe);
+      for (let i = 1; i < REDUCED_MOTION_KEYFRAMES.length; i++) {
+        const kf = REDUCED_MOTION_KEYFRAMES[i];
+        const dist = Math.abs(desiredIndex - kf);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestKeyframe = kf;
+        }
+      }
+      targetIdx = bestKeyframe;
+    }
+
+    let img = images[targetIdx];
+    let resolvedIndex = targetIdx;
+
+    // Fallback to nearest already-decoded frame if user scrubs ahead of network load
     if (!img) {
       for (let offset = 1; offset < TOTAL_FRAMES; offset++) {
-        if (desiredIndex - offset >= 0 && images[desiredIndex - offset]) {
-          img = images[desiredIndex - offset];
-          resolvedIndex = desiredIndex - offset;
+        const prev = targetIdx - offset;
+        if (prev >= 0 && images[prev]) {
+          img = images[prev];
+          resolvedIndex = prev;
           break;
         }
-        if (
-          desiredIndex + offset < TOTAL_FRAMES &&
-          images[desiredIndex + offset]
-        ) {
-          img = images[desiredIndex + offset];
-          resolvedIndex = desiredIndex + offset;
+        const next = targetIdx + offset;
+        if (next < TOTAL_FRAMES && images[next]) {
+          img = images[next];
+          resolvedIndex = next;
           break;
         }
       }
     }
 
     if (!img) return;
+    // Do not redraw if the resolved frame is already on the canvas
     if (lastDrawnFrameRef.current === resolvedIndex) return;
     lastDrawnFrameRef.current = resolvedIndex;
 
-    const cw = canvas.width;
-    const ch = canvas.height;
-    const iw = img.naturalWidth || 1280;
-    const ih = img.naturalHeight || 720;
+    let metrics = cropMetricsRef.current;
+    const iw = img.naturalWidth || DEFAULT_FRAME_WIDTH;
+    const ih = img.naturalHeight || DEFAULT_FRAME_HEIGHT;
 
-    // Compute object-cover crop dimensions
-    const scale = Math.max(cw / iw, ch / ih);
-    const dw = iw * scale;
-    const dh = ih * scale;
-    const dx = (cw - dw) * 0.5;
-    const dy = (ch - dh) * 0.5;
+    if (
+      metrics.cw !== canvas.width ||
+      metrics.ch !== canvas.height ||
+      metrics.iw !== iw ||
+      metrics.ih !== ih
+    ) {
+      metrics = computeCoverMetrics(canvas.width, canvas.height, iw, ih);
+      cropMetricsRef.current = metrics;
+    }
 
-    ctx2d.drawImage(img, dx, dy, dw, dh);
+    ctx2d.drawImage(img, metrics.dx, metrics.dy, metrics.dw, metrics.dh);
   }, []);
+
+  // Schedule a single requestAnimationFrame draw; coalesces multiple scroll ticks per frame
+  const scheduleFrameDraw = useCallback(
+    (desiredIndex: number, forceRedraw = false) => {
+      const clamped = Math.min(
+        TOTAL_FRAMES - 1,
+        Math.max(0, desiredIndex)
+      );
+      targetFrameRef.current = clamped;
+      pendingDrawFrameRef.current = clamped;
+
+      if (forceRedraw) {
+        lastDrawnFrameRef.current = -1;
+      }
+
+      if (drawRafIdRef.current === null) {
+        drawRafIdRef.current = window.requestAnimationFrame(() => {
+          drawRafIdRef.current = null;
+          renderFrameNow(pendingDrawFrameRef.current);
+        });
+      }
+
+      // Wake background loader workers if they paused on a slow device
+      if (wakeLoadersRef.current) {
+        wakeLoadersRef.current();
+      }
+    },
+    [renderFrameNow]
+  );
 
   // Smooth navigation to any section across all devices
   const scrollToSection = useCallback(
@@ -132,7 +296,8 @@ export function CinematicExperience() {
       setActiveSection(section);
 
       if (typeof window !== "undefined") {
-        const hash = section === "home" ? window.location.pathname : `#${section}`;
+        const hash =
+          section === "home" ? window.location.pathname : `#${section}`;
         window.history.replaceState(null, "", hash);
       }
 
@@ -150,10 +315,13 @@ export function CinematicExperience() {
         st.refresh();
       }
 
+      const targetFrame = Math.round(anchor * (TOTAL_FRAMES - 1));
+      targetFrameRef.current = targetFrame;
+
       if (instant && tl) {
         tl.progress(anchor);
         currentProgressRef.current = anchor;
-        drawFrameToCanvas(Math.round(anchor * (TOTAL_FRAMES - 1)));
+        scheduleFrameDraw(targetFrame, true);
       }
 
       const targetScrollY = st.start + (st.end - st.start) * anchor;
@@ -165,11 +333,11 @@ export function CinematicExperience() {
         ScrollTrigger.update();
       }
     },
-    [drawFrameToCanvas]
+    [scheduleFrameDraw]
   );
 
   useEffect(() => {
-    gsap.registerPlugin(ScrollTrigger, Observer);
+    gsap.registerPlugin(ScrollTrigger);
 
     const canvas = canvasRef.current;
     const wrapper = wrapperRef.current;
@@ -183,16 +351,70 @@ export function CinematicExperience() {
       return;
     }
 
-    // Handle responsive canvas sizing
-    const updateCanvasSize = () => {
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    prefersReducedMotionRef.current = prefersReducedMotion;
+
+    let capabilities = detectDeviceCapabilities();
+    smoothingQualityRef.current = capabilities.smoothingQuality;
+
+    // Cache viewport dimensions to ignore mobile URL-bar vertical-only micro-resizes
+    let lastViewportWidth = window.innerWidth;
+    let lastViewportHeight = window.innerHeight;
+    let resizeRafId: number | null = null;
+
+    const applyCanvasSize = (force = false) => {
       if (!canvas) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const width = Math.round(window.innerWidth * dpr);
-      const height = Math.round(window.innerHeight * dpr);
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      // Ignore minor vertical-only address bar height changes on mobile while scrolling
+      if (
+        !force &&
+         capabilities.isMobile &&
+        vw === lastViewportWidth &&
+        Math.abs(vh - lastViewportHeight) < 120
+      ) {
+        return;
+      }
+
+      const widthChanged = vw !== lastViewportWidth;
+      lastViewportWidth = vw;
+      lastViewportHeight = vh;
+
+      capabilities = detectDeviceCapabilities();
+      smoothingQualityRef.current = capabilities.smoothingQuality;
+
+      const dpr = Math.min(
+        window.devicePixelRatio || 1,
+        capabilities.maxDpr
+      );
+      const width = Math.max(1, Math.round(vw * dpr));
+      const height = Math.max(1, Math.round(vh * dpr));
+
       if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width;
         canvas.height = height;
-        lastDrawnFrameRef.current = -1;
+
+        // Re-apply context state because resizing a canvas resets its 2D context state
+        const ctx2d =
+          ctx2dRef.current ||
+          canvas.getContext("2d", { alpha: false, desynchronized: true }) ||
+          canvas.getContext("2d", { alpha: false });
+        if (ctx2d) {
+          ctx2d.imageSmoothingEnabled = true;
+          ctx2d.imageSmoothingQuality = capabilities.smoothingQuality;
+          ctx2dRef.current = ctx2d;
+        }
+
+        cropMetricsRef.current = computeCoverMetrics(
+          width,
+          height,
+          DEFAULT_FRAME_WIDTH,
+          DEFAULT_FRAME_HEIGHT
+        );
+
         const currentFrame = Math.min(
           TOTAL_FRAMES - 1,
           Math.max(
@@ -200,71 +422,238 @@ export function CinematicExperience() {
             Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1))
           )
         );
-        drawFrameToCanvas(currentFrame);
+        scheduleFrameDraw(currentFrame, true);
+      }
+
+      if (widthChanged && scrollTriggerRef.current) {
+        ScrollTrigger.refresh();
       }
     };
 
-    updateCanvasSize();
-    window.addEventListener("resize", updateCanvasSize);
+    applyCanvasSize(true);
 
-    // Progressive, prioritized preloader for the 300 frames
+    const onWindowResize = () => {
+      if (resizeRafId !== null) return;
+      resizeRafId = window.requestAnimationFrame(() => {
+        resizeRafId = null;
+        applyCanvasSize(false);
+      });
+    };
+    window.addEventListener("resize", onWindowResize, { passive: true });
+
+    // =========================================================================
+    // Controlled, Scroll-Prioritized Frame Loader with Async Decode
+    // =========================================================================
     let isCancelled = false;
-    const buildLoadOrder = (): number[] => {
-      const seen = new Set<number>();
-      const order: number[] = [];
-      const pushIndex = (idx: number) => {
-        if (idx >= 0 && idx < TOTAL_FRAMES && !seen.has(idx)) {
-          seen.add(idx);
-          order.push(idx);
-        }
-      };
-      pushIndex(0);
-      for (let i = 0; i < TOTAL_FRAMES; i += 8) pushIndex(i);
-      for (let i = 0; i < TOTAL_FRAMES; i += 2) pushIndex(i);
-      for (let i = 0; i < TOTAL_FRAMES; i++) pushIndex(i);
-      return order;
-    };
+    const frameStates = frameStatesRef.current;
 
-    const loadQueue = buildLoadOrder();
-    let queueCursor = 0;
-    const CONCURRENCY = 8;
-
-    const loadNextBatch = () => {
-      if (isCancelled || queueCursor >= loadQueue.length) return;
-      const frameIndex = loadQueue[queueCursor++];
-      const img = new window.Image();
-      img.decoding = "async";
-      img.src = getFrameSrc(frameIndex);
-      img.onload = () => {
-        if (isCancelled) return;
-        imagesRef.current[frameIndex] = img;
-        const currentTargetFrame = Math.min(
-          TOTAL_FRAMES - 1,
-          Math.max(
-            0,
-            Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1))
-          )
-        );
-        if (Math.abs(frameIndex - currentTargetFrame) <= 6) {
-          lastDrawnFrameRef.current = -1;
-          drawFrameToCanvas(currentTargetFrame);
-        }
-        loadNextBatch();
-      };
-      img.onerror = () => {
-        if (!isCancelled) loadNextBatch();
-      };
-    };
-
-    for (let c = 0; c < CONCURRENCY; c++) {
-      loadNextBatch();
+    // Recover already-loaded images if component remounts in same session
+    for (let i = 0; i < TOTAL_FRAMES; i++) {
+      if (imagesRef.current[i]) {
+        frameStates[i] = FRAME_LOADED;
+      } else if (frameStates[i] === FRAME_LOADING) {
+        frameStates[i] = FRAME_UNLOADED;
+      }
     }
 
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
+    // Select the highest-priority unloaded frame relative to the user's current scroll target
+    const pickNextFrameToLoad = (): number => {
+      if (frameStates[0] === FRAME_UNLOADED) return 0;
 
-    // Master timeline normalized from t = 0 to t = 100
+      const center = targetFrameRef.current;
+
+      // Reduced motion: only load the 5 stable section keyframes
+      if (prefersReducedMotionRef.current) {
+        for (const kf of REDUCED_MOTION_KEYFRAMES) {
+          if (frameStates[kf] === FRAME_UNLOADED) return kf;
+        }
+        return -1;
+      }
+
+      // Helper to scan outward from `center` within `maxRadius` at a given `stride`
+      const findOutward = (maxRadius: number, stride: number): number => {
+        for (let offset = 0; offset <= maxRadius; offset++) {
+          const right = center + offset;
+          if (
+            right < TOTAL_FRAMES &&
+            right % stride === 0 &&
+            frameStates[right] === FRAME_UNLOADED
+          ) {
+            return right;
+          }
+          const left = center - offset;
+          if (
+            left >= 0 &&
+            left % stride === 0 &&
+            frameStates[left] === FRAME_UNLOADED
+          ) {
+            return left;
+          }
+        }
+        return -1;
+      };
+
+      // Tier 1: Immediate vicinity around current scroll position (±16 frames)
+      let candidate = findOutward(16, 2);
+      if (candidate !== -1) return candidate;
+
+      if (!capabilities.isSlowDevice) {
+        candidate = findOutward(12, 1);
+        if (candidate !== -1) return candidate;
+      }
+
+      // Tier 2: Coarse keyframes (stride 8) outward from current scroll position
+      candidate = findOutward(TOTAL_FRAMES, 8);
+      if (candidate !== -1) return candidate;
+
+      // Tier 3: Medium density (stride 4, then stride 2) outward from current scroll position
+      candidate = findOutward(TOTAL_FRAMES, 4);
+      if (candidate !== -1) return candidate;
+
+      candidate = findOutward(TOTAL_FRAMES, 2);
+      if (candidate !== -1) return candidate;
+
+      // Tier 4: Full density (stride 1)
+      // On slow devices, only fill stride-1 within ±32 frames of current scroll position
+      const denseRadius = capabilities.isSlowDevice ? 32 : TOTAL_FRAMES;
+      return findOutward(denseRadius, 1);
+    };
+
+    const loadSingleFrame = (
+      frameIndex: number,
+      highPriority = false
+    ): Promise<void> => {
+      if (isCancelled || frameStates[frameIndex] !== FRAME_UNLOADED) {
+        return Promise.resolve();
+      }
+      frameStates[frameIndex] = FRAME_LOADING;
+
+      return new Promise<void>((resolve) => {
+        const img = new window.Image();
+        img.decoding = "async";
+        if (highPriority && "fetchPriority" in img) {
+          (img as HTMLImageElement & { fetchPriority?: string }).fetchPriority =
+            "high";
+        }
+        img.src = getFrameSrc(frameIndex);
+
+        img.onload = () => {
+          if (isCancelled) {
+            resolve();
+            return;
+          }
+          const finalize = () => {
+            if (isCancelled) {
+              resolve();
+              return;
+            }
+            imagesRef.current[frameIndex] = img;
+            frameStates[frameIndex] = FRAME_LOADED;
+
+            // Only schedule a canvas update if the canvas has not yet drawn the exact target frame
+            // and this newly decoded frame is closer to targetFrame than what is currently drawn
+            const currentTarget = targetFrameRef.current;
+            const lastDrawn = lastDrawnFrameRef.current;
+            if (
+              lastDrawn === -1 ||
+              (lastDrawn !== currentTarget &&
+                Math.abs(frameIndex - currentTarget) <
+                  Math.abs(lastDrawn - currentTarget))
+            ) {
+              scheduleFrameDraw(currentTarget);
+            }
+            resolve();
+          };
+
+          if (typeof img.decode === "function") {
+            img.decode().then(finalize, finalize);
+          } else {
+            finalize();
+          }
+        };
+
+        img.onerror = () => {
+          if (!isCancelled) {
+            frameStates[frameIndex] = FRAME_FAILED;
+          }
+          resolve();
+        };
+      });
+    };
+
+    let activeWorkers = 0;
+    let isActivelyScrolling = false;
+    let scrollIdleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const getEffectiveConcurrency = (): number => {
+      if (!isActivelyScrolling) return capabilities.concurrency;
+      // While actively scrolling, if a nearby frame (within ±8) is already decoded,
+      // pause spawning new decodes during the scroll gesture so 100% of frame budget goes to 60fps rendering.
+      const center = targetFrameRef.current;
+      for (let d = 0; d <= 8; d++) {
+        if (
+          (center - d >= 0 && frameStates[center - d] === FRAME_LOADED) ||
+          (center + d < TOTAL_FRAMES && frameStates[center + d] === FRAME_LOADED)
+        ) {
+          return 0;
+        }
+      }
+      return Math.min(2, capabilities.concurrency);
+    };
+
+    const spawnWorker = () => {
+      const limit = getEffectiveConcurrency();
+      if (isCancelled || activeWorkers >= limit) return;
+      const nextIndex = pickNextFrameToLoad();
+      if (nextIndex === -1) return;
+
+      activeWorkers++;
+      loadSingleFrame(nextIndex, nextIndex === 0).then(() => {
+        activeWorkers--;
+        if (!isCancelled) {
+          spawnWorker();
+        }
+      });
+    };
+
+    const wakeLoadWorkers = () => {
+      if (isCancelled) return;
+      const limit = getEffectiveConcurrency();
+      while (activeWorkers < limit) {
+        const before = activeWorkers;
+        spawnWorker();
+        if (activeWorkers === before) break;
+      }
+    };
+
+    const markScrollActivity = () => {
+      isActivelyScrolling = true;
+      if (scrollIdleTimer !== null) {
+        clearTimeout(scrollIdleTimer);
+      }
+      scrollIdleTimer = setTimeout(() => {
+        isActivelyScrolling = false;
+        wakeLoadWorkers();
+      }, 140);
+    };
+    wakeLoadersRef.current = wakeLoadWorkers;
+
+    // 1. Load Frame 0 immediately with high priority so the canvas never starts blank,
+    //    then spin up the controlled background worker pool (3–4 concurrent requests).
+    if (frameStates[0] === FRAME_LOADED) {
+      scheduleFrameDraw(targetFrameRef.current, true);
+      wakeLoadWorkers();
+    } else {
+      loadSingleFrame(0, true).then(() => {
+        if (!isCancelled) {
+          wakeLoadWorkers();
+        }
+      });
+    }
+
+    // =========================================================================
+    // Master GSAP ScrollTrigger Timeline (t = 0 -> 100)
+    // =========================================================================
     const ctx = gsap.context(() => {
       const tl = gsap.timeline({
         defaults: { ease: "none" },
@@ -277,30 +666,40 @@ export function CinematicExperience() {
         start: "top top",
         end: () => `+=${Math.round(window.innerHeight * 8.0)}`,
         pin: true,
-        scrub: prefersReducedMotion ? false : 0.35,
+        // Tight scrub (0.18s) keeps the sequence responsive without lagging behind user scroll
+        scrub: prefersReducedMotion ? true : 0.18,
+        fastScrollEnd: true,
         anticipatePin: 1,
+        invalidateOnRefresh: false,
         animation: tl,
         onUpdate: (self) => {
           const p = self.progress;
           currentProgressRef.current = p;
+          markScrollActivity();
 
-          // Direct synchronized canvas frame render (1:1 lockstep with scroll)
+          // Schedule RAF-batched canvas draw for latest scroll position
           const targetFrame = Math.min(
             TOTAL_FRAMES - 1,
             Math.max(0, Math.round(p * (TOTAL_FRAMES - 1)))
           );
-          drawFrameToCanvas(targetFrame);
+          scheduleFrameDraw(targetFrame);
 
-          // Update right-edge progress bar without React state re-render
+          // Direct DOM update for right-edge progress bar (zero React re-renders)
           if (progressFillRef.current) {
             progressFillRef.current.style.transform = `scaleY(${p})`;
           }
-          if (progressContainerRef.current) {
-            progressContainerRef.current.style.opacity =
-              p > 0.015 ? "1" : "0";
+          const shouldShowProgress = p > 0.015;
+          if (
+            progressContainerRef.current &&
+            shouldShowProgress !== progressVisibleRef.current
+          ) {
+            progressVisibleRef.current = shouldShowProgress;
+            progressContainerRef.current.style.opacity = shouldShowProgress
+              ? "1"
+              : "0";
           }
 
-          // Update active navigation item only when crossing section boundary
+          // Update React state only when crossing a section boundary
           const nextSec = getSectionFromProgress(p);
           if (nextSec !== activeSectionRef.current) {
             activeSectionRef.current = nextSec;
@@ -316,9 +715,6 @@ export function CinematicExperience() {
 
       // =======================================================================
       // PHASE A — HOME (t: 0 -> 19, Frames 1 -> 57)
-      // Initial state at t=0: Pure #000000 black background, preserved Hero intact.
-      // t: 0 -> 7: Black curtain gradually opens to reveal the crimson portal scene behind the hero.
-      // t: 8 -> 18: Camera pushes into the portal vortex; Hero elements recede in staggered order.
       // =======================================================================
       tl.fromTo(
         heroBlackCurtainRef.current,
@@ -327,11 +723,11 @@ export function CinematicExperience() {
         0.2
       );
 
-      if (canvas) {
+      if (canvas && !prefersReducedMotion) {
         tl.fromTo(
           canvas,
-          { scale: 1.02, filter: "brightness(0.9)" },
-          { scale: 1.0, filter: "brightness(1)", duration: 7, ease: "sine.out" },
+          { scale: 1.02 },
+          { scale: 1.0, duration: 7, ease: "sine.out" },
           0
         );
       }
@@ -352,12 +748,11 @@ export function CinematicExperience() {
       )
         .fromTo(
           heroWordmark,
-          { y: 0, scale: 1, opacity: 1, filter: "blur(0px)" },
+          { y: 0, scale: 1, opacity: 1 },
           {
             y: -22,
             scale: 1.02,
             opacity: 0,
-            filter: "blur(6px)",
             duration: 3.8,
             ease: "power2.in",
           },
@@ -393,7 +788,6 @@ export function CinematicExperience() {
           { y: -16, duration: 6, ease: "sine.inOut" },
           12
         )
-        // Ensure entire Home section container is strictly hidden when transitioning to subsequent scenes
         .fromTo(
           homeEl,
           { autoAlpha: 1, pointerEvents: "auto" },
@@ -439,11 +833,10 @@ export function CinematicExperience() {
         )
         .fromTo(
           skillsHeadingLines,
-          { yPercent: 115, opacity: 0, filter: "blur(5px)" },
+          { yPercent: 115, opacity: 0 },
           {
             yPercent: 0,
             opacity: 1,
-            filter: "blur(0px)",
             stagger: 1.1,
             duration: 4.5,
             ease: "power3.out",
@@ -485,7 +878,6 @@ export function CinematicExperience() {
           {
             yPercent: -115,
             opacity: 0,
-            filter: "blur(4px)",
             stagger: 0.6,
             duration: 3.8,
             ease: "power2.in",
@@ -552,11 +944,10 @@ export function CinematicExperience() {
         )
         .fromTo(
           workHeadingLines,
-          { yPercent: 115, opacity: 0, filter: "blur(5px)" },
+          { yPercent: 115, opacity: 0 },
           {
             yPercent: 0,
             opacity: 1,
-            filter: "blur(0px)",
             stagger: 1.1,
             duration: 4.5,
             ease: "power3.out",
@@ -604,7 +995,6 @@ export function CinematicExperience() {
           {
             yPercent: -115,
             opacity: 0,
-            filter: "blur(4px)",
             stagger: 0.6,
             duration: 3.6,
             ease: "power2.in",
@@ -671,11 +1061,10 @@ export function CinematicExperience() {
         )
         .fromTo(
           aboutHeadingLines,
-          { yPercent: 115, opacity: 0, filter: "blur(5px)" },
+          { yPercent: 115, opacity: 0 },
           {
             yPercent: 0,
             opacity: 1,
-            filter: "blur(0px)",
             stagger: 0.9,
             duration: 4,
             ease: "power3.out",
@@ -723,7 +1112,6 @@ export function CinematicExperience() {
           {
             yPercent: -115,
             opacity: 0,
-            filter: "blur(4px)",
             stagger: 0.45,
             duration: 3.2,
             ease: "power2.in",
@@ -766,7 +1154,7 @@ export function CinematicExperience() {
 
       tl.to(
         crimsonAtmosphereRef.current,
-        { opacity: 0.72, duration: 5, ease: "power2.out" },
+        { opacity: 0.85, duration: 5, ease: "power2.out" },
         87.5
       )
         .fromTo(
@@ -789,11 +1177,10 @@ export function CinematicExperience() {
         )
         .fromTo(
           contactHeadingLines,
-          { yPercent: 115, opacity: 0, filter: "blur(5px)" },
+          { yPercent: 115, opacity: 0 },
           {
             yPercent: 0,
             opacity: 1,
-            filter: "blur(0px)",
             stagger: 1,
             duration: 4.2,
             ease: "power3.out",
@@ -814,13 +1201,40 @@ export function CinematicExperience() {
         );
     }, wrapper);
 
-    // Continuous cursor drag & touch swipe scrubber aligned 1:1 with movement
+    // =========================================================================
+    // RAF-Throttled Desktop Mouse-Drag Scrubber (Never intercepts touch/wheel)
+    // =========================================================================
+    let isPointerDown = false;
     let isDragging = false;
     let startY = 0;
     let startScrollY = 0;
+    let pendingScrollTop: number | null = null;
+    let dragRafId: number | null = null;
+
+    const flushDragScroll = () => {
+      dragRafId = null;
+      if (!isDragging || pendingScrollTop === null) return;
+      window.scrollTo({
+        top: pendingScrollTop,
+        behavior: "instant",
+      });
+      pendingScrollTop = null;
+    };
+
+    const cancelDrag = () => {
+      isPointerDown = false;
+      isDragging = false;
+      pendingScrollTop = null;
+      if (dragRafId !== null) {
+        window.cancelAnimationFrame(dragRafId);
+        dragRafId = null;
+      }
+    };
 
     const onPointerDown = (e: PointerEvent) => {
-      // Don't intercept clicks on links, buttons, inputs or form elements
+      // Never intercept touch or pen gestures; let browser handle native touch scrolling
+      if (e.pointerType !== "mouse" || e.button !== 0) return;
+
       const target = e.target as HTMLElement | null;
       if (
         target &&
@@ -829,39 +1243,53 @@ export function CinematicExperience() {
           target.closest("button") ||
           target.closest("input") ||
           target.closest("textarea") ||
+          target.closest("label") ||
           target.closest("form") ||
           target.closest("nav") ||
+          target.closest("footer") ||
           target.closest('[data-drag-ignore="true"]'))
       ) {
         return;
       }
-      isDragging = true;
+      isPointerDown = true;
+      isDragging = false;
       startY = e.clientY;
       startScrollY = window.scrollY;
     };
 
     const onPointerMove = (e: PointerEvent) => {
-      if (!isDragging) return;
+      if (!isPointerDown || e.pointerType !== "mouse") return;
       const deltaY = startY - e.clientY;
+      if (!isDragging && Math.abs(deltaY) < 5) return;
+      isDragging = true;
+
       const st = scrollTriggerRef.current;
       if (!st) return;
       const totalDist = st.end - st.start;
-      // Moving 1 viewport height advances ~0.25 of progress (1 smooth section transition)
-      const scrollDelta = (deltaY / Math.max(window.innerHeight, 500)) * (totalDist * 0.25);
-      window.scrollTo({
-        top: Math.max(0, Math.min(st.end, startScrollY + scrollDelta)),
-        behavior: "instant",
-      });
+      const scrollDelta =
+        (deltaY / Math.max(lastViewportHeight, 500)) * (totalDist * 0.25);
+      pendingScrollTop = Math.max(
+        0,
+        Math.min(st.end, startScrollY + scrollDelta)
+      );
+
+      if (dragRafId === null) {
+        dragRafId = window.requestAnimationFrame(flushDragScroll);
+      }
     };
 
-    const onPointerUp = () => {
-      isDragging = false;
+    // If user scrolls with mouse wheel or trackpad, cancel any pointer drag immediately
+    const onWheel = () => {
+      if (isPointerDown || isDragging) {
+        cancelDrag();
+      }
     };
 
     window.addEventListener("pointerdown", onPointerDown, { passive: true });
     window.addEventListener("pointermove", onPointerMove, { passive: true });
-    window.addEventListener("pointerup", onPointerUp, { passive: true });
-    window.addEventListener("pointercancel", onPointerUp, { passive: true });
+    window.addEventListener("pointerup", cancelDrag, { passive: true });
+    window.addEventListener("pointercancel", cancelDrag, { passive: true });
+    window.addEventListener("wheel", onWheel, { passive: true });
 
     // Handle initial URL hash and in-page hashchange
     const handleHashNavigation = (instant = true) => {
@@ -880,16 +1308,29 @@ export function CinematicExperience() {
 
     return () => {
       isCancelled = true;
-      window.removeEventListener("resize", updateCanvasSize);
+      wakeLoadersRef.current = null;
+      if (scrollIdleTimer !== null) {
+        clearTimeout(scrollIdleTimer);
+      }
+      if (resizeRafId !== null) {
+        window.cancelAnimationFrame(resizeRafId);
+      }
+      if (drawRafIdRef.current !== null) {
+        window.cancelAnimationFrame(drawRafIdRef.current);
+        drawRafIdRef.current = null;
+      }
+      cancelDrag();
+      window.removeEventListener("resize", onWindowResize);
       window.removeEventListener("hashchange", onHashChange);
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
+      window.removeEventListener("pointerup", cancelDrag);
+      window.removeEventListener("pointercancel", cancelDrag);
+      window.removeEventListener("wheel", onWheel);
       if (scrollTriggerRef.current) scrollTriggerRef.current.kill();
       ctx.revert();
     };
-  }, [drawFrameToCanvas, scrollToSection]);
+  }, [renderFrameNow, scheduleFrameDraw, scrollToSection]);
 
   return (
     <div className="relative w-full bg-[#000000] text-white">
@@ -916,8 +1357,8 @@ export function CinematicExperience() {
           {/* Layer 1: 300-Frame High-Performance Canvas Sequence */}
           <canvas
             ref={canvasRef}
-            width={1280}
-            height={720}
+            width={DEFAULT_FRAME_WIDTH}
+            height={DEFAULT_FRAME_HEIGHT}
             aria-hidden="true"
             className="absolute inset-0 z-0 w-full h-full pointer-events-none select-none will-change-transform"
           />

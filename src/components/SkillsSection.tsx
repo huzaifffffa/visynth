@@ -84,7 +84,7 @@ export function SkillsSection({ sectionRef }: SkillsSectionProps) {
                   {item.title}
                 </span>
               </div>
-              <span className="text-[clamp(9.5px,0.78vw,12px)] font-light tracking-[0.02em] text-[#9e9e9e] sm:text-right">
+              <span className="text-[clamp(9.5px,0.78vw,12px)] font-light tracking-[0.02em] text-[#b8b8b8] sm:text-right">
                 {item.detail}
               </span>
             </div>

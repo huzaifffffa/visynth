@@ -77,11 +77,26 @@ export function AboutSection({ sectionRef }: AboutSectionProps) {
               <span className="text-[clamp(8.5px,0.68vw,10.5px)] font-semibold tracking-[0.22em] text-white uppercase">
                 {pillar.label}
               </span>
-              <span className="text-[clamp(9.5px,0.76vw,11.5px)] font-light leading-[1.55] text-[#9e9e9e]">
+              <span className="text-[clamp(9.5px,0.76vw,11.5px)] font-light leading-[1.55] text-[#b8b8b8]">
                 {pillar.description}
               </span>
             </div>
           ))}
+        </div>
+
+        {/* Studio Process Line */}
+        <div
+          data-anim="about-copy"
+          className="mt-[clamp(16px,2vw,28px)] pt-3 border-t border-white/[0.08] flex items-center gap-2 sm:gap-3 text-[9px] sm:text-[10px] font-mono tracking-[0.2em] uppercase text-white/50 will-change-transform flex-wrap"
+        >
+          <span className="text-[#ff3b3b] font-semibold">PROCESS:</span>
+          <span>DISCOVERY</span>
+          <span className="text-white/20">→</span>
+          <span>DIRECTION</span>
+          <span className="text-white/20">→</span>
+          <span>BUILD</span>
+          <span className="text-white/20">→</span>
+          <span>DELIVERY</span>
         </div>
       </div>
     </section>

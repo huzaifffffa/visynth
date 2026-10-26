@@ -13,12 +13,63 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  themeColor: "#000000",
 };
 
+const SITE_URL = "https://visynth-seven.vercel.app";
+
 export const metadata: Metadata = {
-  title: "VISYNTH — Creative Technology Studio",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "VISYNTH — Creative Technology Studio",
+    template: "%s — VISYNTH",
+  },
   description:
     "We build distinctive brands, digital experiences, and intelligent technology—from branding and 3D animation to web, app, marketing, and cybersecurity solutions.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "VISYNTH — Creative Technology Studio",
+    description:
+      "Where vision becomes growth. Distinctive brands, cinematic 3D motion, creative web engineering, and intelligent cybersecurity.",
+    url: SITE_URL,
+    siteName: "VISYNTH",
+    locale: "en_US",
+    type: "website",
+    images: [
+      {
+        url: "/portfolio/work-02.webp",
+        width: 800,
+        height: 1040,
+        alt: "VISYNTH — Signature Studio Creative Visual",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "VISYNTH — Creative Technology Studio",
+    description:
+      "Where vision becomes growth. Distinctive brands, cinematic 3D motion, creative web engineering, and intelligent cybersecurity.",
+    images: ["/portfolio/work-02.webp"],
+  },
+  icons: {
+    icon: "/favicon.ico",
+  },
+};
+
+const STRUCTURED_DATA = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "VISYNTH",
+  legalName: "VISYNTH Creative Technology Studio",
+  url: SITE_URL,
+  logo: `${SITE_URL}/visynth-logo.png`,
+  description:
+    "Creative technology studio specializing in branding, 3D animation, web and application development, digital marketing, and cybersecurity.",
+  sameAs: [
+    "https://www.instagram.com/visynth.official/",
+  ],
 };
 
 const EXTENSION_ATTR_SANITIZER = `
@@ -82,6 +133,10 @@ export default function RootLayout({
           id="sanitize-extension-attrs"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{ __html: EXTENSION_ATTR_SANITIZER }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }}
         />
         {children}
       </body>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -18,14 +18,29 @@ interface SiteNavigationProps {
   activeSection?: SectionId;
   onNavigate?: (section: SectionId) => void;
   isPortfolioPage?: boolean;
+  isSubPage?: boolean;
 }
 
 export function SiteNavigation({
   activeSection,
   onNavigate,
   isPortfolioPage = false,
+  isSubPage = false,
 }: SiteNavigationProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isExternalRoute = isPortfolioPage || isSubPage || !onNavigate;
+
+  // Close mobile navigation on Escape key
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileMenuOpen]);
 
   const handleLinkClick = (
     e: React.MouseEvent<HTMLAnchorElement>,
@@ -41,7 +56,7 @@ export function SiteNavigation({
   };
 
   const getSectionHref = (section: SectionId) => {
-    if (isPortfolioPage) {
+    if (isExternalRoute) {
       return section === "home" ? "/" : `/#${section}`;
     }
     return `#${section}`;
@@ -51,9 +66,9 @@ export function SiteNavigation({
     <header className="fixed top-0 left-0 right-0 z-50 w-full h-[clamp(64px,5.6vw,90px)] border-b border-white/[0.11] bg-gradient-to-b from-black/85 via-black/50 to-black/10 backdrop-blur-[2px] flex items-center justify-between pl-[5.8%] pr-[5.8%] select-none">
       {/* Brand Logo (Left) — Preserved exactly */}
       <Link
-        href={isPortfolioPage ? "/" : "#home"}
+        href={isExternalRoute ? "/" : "#home"}
         onClick={(e) => handleLinkClick(e, "home")}
-        className="relative flex items-center shrink-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/60"
+        className="relative flex items-center shrink-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm"
         aria-label="VISYNTH Home"
       >
         <Image
@@ -72,14 +87,14 @@ export function SiteNavigation({
         className="hidden md:flex items-center gap-[clamp(22px,3.4vw,54px)] absolute left-1/2 -translate-x-1/2"
       >
         {NAV_ITEMS.map((item) => {
-          const isActive = !isPortfolioPage && activeSection === item.id;
+          const isActive = !isExternalRoute && activeSection === item.id;
           return (
             <Link
               key={item.id}
               href={getSectionHref(item.id)}
               onClick={(e) => handleLinkClick(e, item.id)}
               aria-current={isActive ? "page" : undefined}
-              className={`relative py-2 text-[clamp(9.5px,0.72vw,11.5px)] font-medium tracking-[0.22em] uppercase transition-colors duration-300 ${
+              className={`relative py-2 px-1 text-[clamp(9.5px,0.72vw,11.5px)] font-medium tracking-[0.22em] uppercase transition-colors duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm ${
                 isActive ? "text-white" : "text-[#c8c8c8] hover:text-white"
               }`}
             >
@@ -106,7 +121,7 @@ export function SiteNavigation({
         <Link
           href="/portfolio"
           aria-current={isPortfolioPage ? "page" : undefined}
-          className={`relative inline-flex items-center justify-center py-2 text-[clamp(9.5px,0.72vw,11.5px)] font-medium tracking-[0.22em] uppercase transition-colors duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/80 ${
+          className={`relative inline-flex items-center justify-center py-2 px-1 text-[clamp(9.5px,0.72vw,11.5px)] font-medium tracking-[0.22em] uppercase transition-colors duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/80 rounded-sm ${
             isPortfolioPage
               ? "text-white"
               : "text-white/80 hover:text-white"
@@ -128,8 +143,9 @@ export function SiteNavigation({
           type="button"
           onClick={() => setMobileMenuOpen((prev) => !prev)}
           aria-expanded={mobileMenuOpen}
-          aria-label="Toggle navigation menu"
-          className="md:hidden relative z-50 flex flex-col justify-center items-center w-9 h-9 gap-1.5 text-white/85 hover:text-white focus:outline-none"
+          aria-controls="mobile-navigation-drawer"
+          aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+          className="md:hidden relative z-50 flex flex-col justify-center items-center w-9 h-9 gap-1.5 text-white/85 hover:text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/80 rounded-sm cursor-pointer"
         >
           <span
             className={`block w-5 h-[1px] bg-current transition-transform duration-300 ${
@@ -151,9 +167,12 @@ export function SiteNavigation({
 
       {/* Mobile Dropdown Drawer */}
       <div
+        id="mobile-navigation-drawer"
+        data-drag-ignore="true"
+        aria-hidden={!mobileMenuOpen}
         className={`md:hidden fixed inset-x-0 top-[clamp(64px,5.6vw,90px)] bg-black/95 border-b border-white/10 backdrop-blur-md transition-all duration-300 overflow-hidden ${
           mobileMenuOpen
-            ? "max-h-96 opacity-100 py-6"
+            ? "max-h-96 opacity-100 py-6 pointer-events-auto"
             : "max-h-0 opacity-0 py-0 pointer-events-none"
         }`}
       >
@@ -162,21 +181,23 @@ export function SiteNavigation({
           className="flex flex-col items-start gap-4 px-[5.8%]"
         >
           {NAV_ITEMS.map((item) => {
-            const isActive = !isPortfolioPage && activeSection === item.id;
+            const isActive = !isExternalRoute && activeSection === item.id;
             return (
               <Link
                 key={item.id}
                 href={getSectionHref(item.id)}
                 onClick={(e) => handleLinkClick(e, item.id)}
-                className={`flex items-center gap-3 text-xs tracking-[0.24em] uppercase py-1.5 transition-colors ${
-                  isActive ? "text-white font-semibold" : "text-white/65"
+                aria-current={isActive ? "page" : undefined}
+                className={`flex items-center gap-3 text-xs tracking-[0.24em] uppercase py-1.5 px-1 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm ${
+                  isActive ? "text-white font-semibold" : "text-white/70 hover:text-white"
                 }`}
               >
                 <span
+                  aria-hidden="true"
                   className={`w-1.5 h-1.5 rounded-full transition-all ${
                     isActive
                       ? "bg-[#ff2a2a] shadow-[0_0_8px_2px_rgba(255,35,35,0.9)]"
-                      : "bg-white/20"
+                      : "bg-white/25"
                   }`}
                 />
                 {item.label}
@@ -186,11 +207,15 @@ export function SiteNavigation({
           <Link
             href="/portfolio"
             onClick={() => setMobileMenuOpen(false)}
-            className={`flex items-center gap-3 text-xs tracking-[0.24em] uppercase py-1.5 transition-colors ${
-              isPortfolioPage ? "text-white font-semibold" : "text-[#ff4d4d]"
+            aria-current={isPortfolioPage ? "page" : undefined}
+            className={`flex items-center gap-3 text-xs tracking-[0.24em] uppercase py-1.5 px-1 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm ${
+              isPortfolioPage ? "text-white font-semibold" : "text-[#ff4d4d] hover:text-white"
             }`}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-[#ff2a2a] shadow-[0_0_8px_2px_rgba(255,35,35,0.9)]" />
+            <span
+              aria-hidden="true"
+              className="w-1.5 h-1.5 rounded-full bg-[#ff2a2a] shadow-[0_0_8px_2px_rgba(255,35,35,0.9)]"
+            />
             PORTFOLIO
           </Link>
         </nav>

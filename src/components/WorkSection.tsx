@@ -107,7 +107,7 @@ export function WorkSection({
             data-anim="work-cta"
             href="#contact"
             onClick={handleCtaClick}
-            className="inline-flex items-center gap-[clamp(12px,1.3vw,20px)] group cursor-pointer focus:outline-none"
+            className="inline-flex items-center gap-[clamp(12px,1.3vw,20px)] group cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/60 rounded-sm"
           >
             <span className="text-[clamp(8.5px,0.72vw,11.5px)] font-semibold tracking-[0.24em] text-white uppercase">
               START A CONVERSATION
