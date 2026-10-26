@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import Lenis from "lenis";
 import { SectionId, SiteNavigation } from "./SiteNavigation";
 import { ScrollProgressIndicator } from "./ScrollProgressIndicator";
 import { HeroSection } from "./HeroSection";
@@ -140,6 +141,7 @@ export function CinematicExperience() {
   const ctx2dRef = useRef<CanvasRenderingContext2D | null>(null);
   const scrollTriggerRef = useRef<ScrollTrigger | null>(null);
   const masterTimelineRef = useRef<gsap.core.Timeline | null>(null);
+  const lenisRef = useRef<Lenis | null>(null);
 
   // Atmospheric overlay refs
   const heroBlackCurtainRef = useRef<HTMLDivElement | null>(null);
@@ -304,10 +306,15 @@ export function CinematicExperience() {
       const anchor = SECTION_SCROLL_ANCHORS[section];
       const tl = masterTimelineRef.current;
       const st = scrollTriggerRef.current;
+      const lenis = lenisRef.current;
 
       if (!st) {
         if (tl) tl.progress(anchor);
-        window.scrollTo({ top: 0, behavior: instant ? "instant" : "smooth" });
+        if (lenis) {
+          lenis.scrollTo(0, { immediate: instant });
+        } else {
+          window.scrollTo({ top: 0, behavior: instant ? "instant" : "smooth" });
+        }
         return;
       }
 
@@ -325,10 +332,18 @@ export function CinematicExperience() {
       }
 
       const targetScrollY = st.start + (st.end - st.start) * anchor;
-      window.scrollTo({
-        top: targetScrollY,
-        behavior: instant ? "instant" : "smooth",
-      });
+      if (lenis) {
+        lenis.scrollTo(targetScrollY, {
+          duration: instant ? 0 : 0.9,
+          immediate: instant,
+          lock: false,
+        });
+      } else {
+        window.scrollTo({
+          top: targetScrollY,
+          behavior: instant ? "instant" : "smooth",
+        });
+      }
       if (instant) {
         ScrollTrigger.update();
       }
@@ -338,6 +353,28 @@ export function CinematicExperience() {
 
   useEffect(() => {
     gsap.registerPlugin(ScrollTrigger);
+
+    // Initialize Lenis smooth scroll engine for fluid, lag-free touchpad and touch scrubbing
+    const lenis = new Lenis({
+      duration: 0.95,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      orientation: "vertical",
+      gestureOrientation: "vertical",
+      smoothWheel: true,
+      wheelMultiplier: 0.9,
+      touchMultiplier: 1.15,
+      syncTouch: false,
+      autoResize: true,
+    });
+    lenisRef.current = lenis;
+
+    lenis.on("scroll", ScrollTrigger.update);
+
+    const tickerCallback = (time: number) => {
+      lenis.raf(time * 1000);
+    };
+    gsap.ticker.add(tickerCallback);
+    gsap.ticker.lagSmoothing(0);
 
     const canvas = canvasRef.current;
     const wrapper = wrapperRef.current;
@@ -666,8 +703,9 @@ export function CinematicExperience() {
         start: "top top",
         end: () => `+=${Math.round(window.innerHeight * 8.0)}`,
         pin: true,
-        // Tight scrub (0.18s) keeps the sequence responsive without lagging behind user scroll
-        scrub: prefersReducedMotion ? true : 0.18,
+        // With Lenis smoothly interpolating wheel and touch inputs, scrub: true
+        // locks the timeline and canvas 1:1 to the smooth scroll position without lag
+        scrub: true,
         fastScrollEnd: true,
         anticipatePin: 1,
         invalidateOnRefresh: false,
@@ -1201,96 +1239,6 @@ export function CinematicExperience() {
         );
     }, wrapper);
 
-    // =========================================================================
-    // RAF-Throttled Desktop Mouse-Drag Scrubber (Never intercepts touch/wheel)
-    // =========================================================================
-    let isPointerDown = false;
-    let isDragging = false;
-    let startY = 0;
-    let startScrollY = 0;
-    let pendingScrollTop: number | null = null;
-    let dragRafId: number | null = null;
-
-    const flushDragScroll = () => {
-      dragRafId = null;
-      if (!isDragging || pendingScrollTop === null) return;
-      window.scrollTo({
-        top: pendingScrollTop,
-        behavior: "instant",
-      });
-      pendingScrollTop = null;
-    };
-
-    const cancelDrag = () => {
-      isPointerDown = false;
-      isDragging = false;
-      pendingScrollTop = null;
-      if (dragRafId !== null) {
-        window.cancelAnimationFrame(dragRafId);
-        dragRafId = null;
-      }
-    };
-
-    const onPointerDown = (e: PointerEvent) => {
-      // Never intercept touch or pen gestures; let browser handle native touch scrolling
-      if (e.pointerType !== "mouse" || e.button !== 0) return;
-
-      const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        typeof target.closest === "function" &&
-        (target.closest("a") ||
-          target.closest("button") ||
-          target.closest("input") ||
-          target.closest("textarea") ||
-          target.closest("label") ||
-          target.closest("form") ||
-          target.closest("nav") ||
-          target.closest("footer") ||
-          target.closest('[data-drag-ignore="true"]'))
-      ) {
-        return;
-      }
-      isPointerDown = true;
-      isDragging = false;
-      startY = e.clientY;
-      startScrollY = window.scrollY;
-    };
-
-    const onPointerMove = (e: PointerEvent) => {
-      if (!isPointerDown || e.pointerType !== "mouse") return;
-      const deltaY = startY - e.clientY;
-      if (!isDragging && Math.abs(deltaY) < 5) return;
-      isDragging = true;
-
-      const st = scrollTriggerRef.current;
-      if (!st) return;
-      const totalDist = st.end - st.start;
-      const scrollDelta =
-        (deltaY / Math.max(lastViewportHeight, 500)) * (totalDist * 0.25);
-      pendingScrollTop = Math.max(
-        0,
-        Math.min(st.end, startScrollY + scrollDelta)
-      );
-
-      if (dragRafId === null) {
-        dragRafId = window.requestAnimationFrame(flushDragScroll);
-      }
-    };
-
-    // If user scrolls with mouse wheel or trackpad, cancel any pointer drag immediately
-    const onWheel = () => {
-      if (isPointerDown || isDragging) {
-        cancelDrag();
-      }
-    };
-
-    window.addEventListener("pointerdown", onPointerDown, { passive: true });
-    window.addEventListener("pointermove", onPointerMove, { passive: true });
-    window.addEventListener("pointerup", cancelDrag, { passive: true });
-    window.addEventListener("pointercancel", cancelDrag, { passive: true });
-    window.addEventListener("wheel", onWheel, { passive: true });
-
     // Handle initial URL hash and in-page hashchange
     const handleHashNavigation = (instant = true) => {
       const hash = window.location.hash.replace("#", "") as SectionId;
@@ -1319,14 +1267,11 @@ export function CinematicExperience() {
         window.cancelAnimationFrame(drawRafIdRef.current);
         drawRafIdRef.current = null;
       }
-      cancelDrag();
       window.removeEventListener("resize", onWindowResize);
       window.removeEventListener("hashchange", onHashChange);
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", cancelDrag);
-      window.removeEventListener("pointercancel", cancelDrag);
-      window.removeEventListener("wheel", onWheel);
+      gsap.ticker.remove(tickerCallback);
+      lenis.destroy();
+      lenisRef.current = null;
       if (scrollTriggerRef.current) scrollTriggerRef.current.kill();
       ctx.revert();
     };

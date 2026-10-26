@@ -22,8 +22,8 @@ export function HeroSection({ sectionRef, onExploreWork }: HeroSectionProps) {
       aria-label="Home"
       className="absolute inset-0 z-20 flex flex-col justify-between w-full h-full pt-[clamp(60px,5.2vw,90px)] select-none"
     >
-      {/* Vertically balanced content container: sits higher on mobile without header overlap */}
-      <div className="flex-1 flex items-start sm:items-center w-full pl-[5.95%] pr-[5.95%] pt-4 sm:pt-6 md:pt-0 pb-8 sm:pb-12">
+      {/* Vertically centered content container on mobile: sits in the middle left */}
+      <div className="flex-1 flex items-center w-full pl-[5.95%] pr-[5.95%] pt-0 pb-6 sm:pb-12">
         <div
           data-hero="container"
           className="w-full max-w-[clamp(320px,40.23vw,620px)] flex flex-col items-start will-change-transform"
