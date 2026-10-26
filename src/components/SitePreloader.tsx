@@ -152,6 +152,7 @@ export function SitePreloader() {
   const closingPrimaryRef = useRef<HTMLDivElement | null>(null);
   const closingSublineRef = useRef<HTMLDivElement | null>(null);
   const exitSweepLineRef = useRef<HTMLDivElement | null>(null);
+  const skipHandlerRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (hasSessionPreloadCompleted()) {
@@ -192,6 +193,10 @@ export function SitePreloader() {
       }
     };
     const preventScrollKeys = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('[data-testid="preloader-skip-button"]')) {
+        return;
+      }
       const scrollKeys = [
         "ArrowUp",
         "ArrowDown",
@@ -248,18 +253,25 @@ export function SitePreloader() {
       },
     });
 
-    // 3. Coordinated Exit Transition once BOTH Story and Assets are Ready
-    const triggerExitIfReady = () => {
-      if (isDisposed || exitStarted || !storyCompleted || !assetsReady) {
+    // 3. Coordinated Exit Transition once BOTH Story and Assets are Ready (or when Skipped)
+    const triggerExitIfReady = (isManualSkip = false) => {
+      if (isDisposed || exitStarted) {
+        return;
+      }
+      if (!isManualSkip && (!storyCompleted || !assetsReady)) {
         return;
       }
       exitStarted = true;
+
+      if (isManualSkip) {
+        typewriter.cancel();
+      }
 
       if (cursorBlinkTween) {
         cursorBlinkTween.kill();
       }
       if (cursorRef.current) {
-        gsap.to(cursorRef.current, { opacity: 0, duration: 0.2 });
+        gsap.to(cursorRef.current, { opacity: 0, duration: 0.15 });
       }
 
       const exitTl = gsap.timeline({
@@ -276,22 +288,25 @@ export function SitePreloader() {
       if (prefersReducedMotion) {
         exitTl.to(root, {
           opacity: 0,
-          duration: 0.4,
+          duration: 0.35,
           ease: "power1.out",
         });
         return;
       }
 
-      // Hold the final VISYNTH line for ~500ms, sweep crimson line, scale background 1 -> 1.03, and fade out over ~950ms
+      // If skipped manually, exit immediately without the 500ms hold; otherwise hold final line ~500ms
+      const holdDuration = isManualSkip ? 0 : 0.5;
+      const fadeDuration = isManualSkip ? 0.55 : 0.9;
+
       exitTl
-        .to({}, { duration: 0.5 })
+        .to({}, { duration: holdDuration })
         .fromTo(
           exitSweepLineRef.current,
           { scaleX: 0, opacity: 0.95 },
           {
             scaleX: 1,
             opacity: 1,
-            duration: 0.48,
+            duration: isManualSkip ? 0.35 : 0.48,
             ease: "power3.inOut",
           }
         )
@@ -299,7 +314,7 @@ export function SitePreloader() {
           bgLayerRef.current,
           {
             scale: 1.03,
-            duration: 0.95,
+            duration: fadeDuration,
             ease: "power2.inOut",
           },
           "-=0.18"
@@ -308,11 +323,17 @@ export function SitePreloader() {
           root,
           {
             opacity: 0,
-            duration: 0.9,
+            duration: fadeDuration,
             ease: "power2.inOut",
           },
           "<"
         );
+    };
+
+    skipHandlerRef.current = () => {
+      storyCompleted = true;
+      assetsReady = true;
+      triggerExitIfReady(true);
     };
 
     assetController.promise.then(() => {
@@ -973,6 +994,21 @@ export function SitePreloader() {
           </div>
         </div>
       </div>
+
+      {/* Bottom-Right Skip Button */}
+      <button
+        type="button"
+        onClick={() => skipHandlerRef.current?.()}
+        data-testid="preloader-skip-button"
+        aria-label="Skip intro"
+        className="group absolute bottom-6 right-6 md:bottom-10 md:right-[6vw] z-20 inline-flex items-center gap-2.5 px-4 py-2 rounded-sm border border-white/15 bg-black/50 backdrop-blur-sm text-[10px] sm:text-[11px] font-mono tracking-[0.28em] uppercase text-[rgba(245,245,245,0.68)] hover:text-[#F5F5F5] hover:border-[#FF2A2A]/70 hover:shadow-[0_0_16px_rgba(255,42,42,0.22)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#FF2A2A] transition-all duration-300 cursor-pointer"
+      >
+        <span>SKIP</span>
+        <span
+          aria-hidden="true"
+          className="w-1.5 h-1.5 rounded-full bg-[#E61E1E] group-hover:bg-[#FF2A2A] group-hover:shadow-[0_0_8px_rgba(255,42,42,0.85)] transition-all duration-300"
+        />
+      </button>
 
       {/* Full-Screen Horizontal Crimson Exit Divider Line */}
       <div

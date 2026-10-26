@@ -1272,6 +1272,7 @@ export function CinematicExperience() {
 
     const onPreloaderComplete = () => {
       lenis.start();
+      wakeLoadersRef.current?.();
       scheduleFrameDraw(targetFrameRef.current, true);
       ScrollTrigger.refresh();
     };
