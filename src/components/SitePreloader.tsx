@@ -1001,13 +1001,9 @@ export function SitePreloader() {
         onClick={() => skipHandlerRef.current?.()}
         data-testid="preloader-skip-button"
         aria-label="Skip intro"
-        className="group absolute bottom-6 right-6 md:bottom-10 md:right-[6vw] z-20 inline-flex items-center gap-2.5 px-4 py-2 rounded-sm border border-white/15 bg-black/50 backdrop-blur-sm text-[10px] sm:text-[11px] font-mono tracking-[0.28em] uppercase text-[rgba(245,245,245,0.68)] hover:text-[#F5F5F5] hover:border-[#FF2A2A]/70 hover:shadow-[0_0_16px_rgba(255,42,42,0.22)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#FF2A2A] transition-all duration-300 cursor-pointer"
+        className="absolute bottom-6 right-6 md:bottom-10 md:right-[6vw] z-20 px-2 py-1 bg-transparent border-0 text-[11px] sm:text-xs font-mono tracking-[0.28em] uppercase text-[#F5F5F5] hover:text-[#FF2A2A] hover:[text-shadow:0_0_14px_rgba(255,42,42,0.9),0_0_28px_rgba(230,30,30,0.65)] focus-visible:outline-none focus-visible:text-[#FF2A2A] focus-visible:[text-shadow:0_0_14px_rgba(255,42,42,0.9)] transition-all duration-300 cursor-pointer"
       >
-        <span>SKIP</span>
-        <span
-          aria-hidden="true"
-          className="w-1.5 h-1.5 rounded-full bg-[#E61E1E] group-hover:bg-[#FF2A2A] group-hover:shadow-[0_0_8px_rgba(255,42,42,0.85)] transition-all duration-300"
-        />
+        SKIP
       </button>
 
       {/* Full-Screen Horizontal Crimson Exit Divider Line */}
