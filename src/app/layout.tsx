@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Montserrat } from "next/font/google";
 import Script from "next/script";
+import { SitePreloader } from "@/components/SitePreloader";
 import "./globals.css";
 
 const montserrat = Montserrat({
@@ -145,7 +146,8 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }}
         />
-        {children}
+        <SitePreloader />
+        <div id="visynth-app-content">{children}</div>
       </body>
     </html>
   );

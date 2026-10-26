@@ -19,6 +19,11 @@ html {
   overscroll-behavior-y: none;
 }
 
+html:has([data-testid="site-preloader"]),
+body:has([data-testid="site-preloader"]) {
+  overflow: hidden !important;
+}
+
 body {
   background-color: #000000;
   color: #ffffff;

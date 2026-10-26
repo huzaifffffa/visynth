@@ -4,6 +4,12 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
+import {
+  getSharedFrames,
+  getSharedFrameStates,
+  hasSessionPreloadCompleted,
+  notifyExperienceReady,
+} from "@/lib/preloadSiteAssets";
 import { SectionId, SiteNavigation } from "./SiteNavigation";
 import { ScrollProgressIndicator } from "./ScrollProgressIndicator";
 import { HeroSection } from "./HeroSection";
@@ -168,10 +174,8 @@ export function CinematicExperience() {
   const lastDrawnFrameRef = useRef<number>(-1);
   const prefersReducedMotionRef = useRef<boolean>(false);
 
-  const imagesRef = useRef<(HTMLImageElement | null)[]>(
-    new Array(TOTAL_FRAMES).fill(null)
-  );
-  const frameStatesRef = useRef<Uint8Array>(new Uint8Array(TOTAL_FRAMES));
+  const imagesRef = useRef<(HTMLImageElement | null)[]>(getSharedFrames());
+  const frameStatesRef = useRef<Uint8Array>(getSharedFrameStates());
   const wakeLoadersRef = useRef<(() => void) | null>(null);
 
   // Cached canvas dimensions & object-cover crop metrics
@@ -677,12 +681,15 @@ export function CinematicExperience() {
 
     // 1. Load Frame 0 immediately with high priority so the canvas never starts blank,
     //    then spin up the controlled background worker pool (3–4 concurrent requests).
-    if (frameStates[0] === FRAME_LOADED) {
+    if (frameStates[0] === FRAME_LOADED && imagesRef.current[0]) {
       scheduleFrameDraw(targetFrameRef.current, true);
+      notifyExperienceReady();
       wakeLoadWorkers();
     } else {
       loadSingleFrame(0, true).then(() => {
         if (!isCancelled) {
+          scheduleFrameDraw(targetFrameRef.current, true);
+          notifyExperienceReady();
           wakeLoadWorkers();
         }
       });
@@ -1254,6 +1261,24 @@ export function CinematicExperience() {
     const onHashChange = () => handleHashNavigation(false);
     window.addEventListener("hashchange", onHashChange);
 
+    // Pause Lenis scroll while the initial preloader is active
+    if (!hasSessionPreloadCompleted()) {
+      lenis.stop();
+    }
+
+    const onPreloaderStart = () => {
+      lenis.stop();
+    };
+
+    const onPreloaderComplete = () => {
+      lenis.start();
+      scheduleFrameDraw(targetFrameRef.current, true);
+      ScrollTrigger.refresh();
+    };
+
+    window.addEventListener("visynth:preloader-start", onPreloaderStart);
+    window.addEventListener("visynth:preloader-complete", onPreloaderComplete);
+
     return () => {
       isCancelled = true;
       wakeLoadersRef.current = null;
@@ -1269,6 +1294,11 @@ export function CinematicExperience() {
       }
       window.removeEventListener("resize", onWindowResize);
       window.removeEventListener("hashchange", onHashChange);
+      window.removeEventListener("visynth:preloader-start", onPreloaderStart);
+      window.removeEventListener(
+        "visynth:preloader-complete",
+        onPreloaderComplete
+      );
       gsap.ticker.remove(tickerCallback);
       lenis.destroy();
       lenisRef.current = null;
