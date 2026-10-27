@@ -35,7 +35,9 @@ const SKILLS_DISCIPLINES = [
   },
 ];
 
-export function SkillsSection({ sectionRef }: SkillsSectionProps) {
+export const SkillsSection = React.memo(function SkillsSection({
+  sectionRef,
+}: SkillsSectionProps) {
   return (
     <section
       ref={sectionRef}
@@ -45,9 +47,9 @@ export function SkillsSection({ sectionRef }: SkillsSectionProps) {
     >
       <div
         data-skills="container"
-        className="w-full max-w-[clamp(340px,45vw,680px)] flex flex-col items-start will-change-transform"
+        className="w-full max-w-[clamp(340px,45vw,680px)] flex flex-col items-start"
       >
-        <SectionEyebrow label="SKILLS & CAPABILITIES" />
+        <SectionEyebrow label="01 / SKILLS & CAPABILITIES" />
 
         <AnimatedHeading
           lines={[
@@ -61,30 +63,30 @@ export function SkillsSection({ sectionRef }: SkillsSectionProps) {
 
         <p
           data-anim="body-copy"
-          className="mt-[clamp(14px,1.6vw,24px)] max-w-[52ch] text-[clamp(10.5px,0.92vw,14.5px)] font-light leading-[1.68] tracking-[0.015em] text-[#b5b5b5] will-change-transform"
+          className="mt-[clamp(14px,1.6vw,24px)] max-w-[52ch] text-[clamp(10.5px,0.92vw,14.5px)] font-light leading-[1.68] tracking-[0.015em] text-[#b5b5b5]"
         >
           Every discipline operates as part of a unified creative and technical
           system—designed to move seamlessly from initial concept to resilient
           production.
         </p>
 
-        {/* Typographic Discipline Index (no cards, pure editorial lines) */}
+        {/* Typographic Discipline Index (Editorial Swiss layout) */}
         <div className="mt-[clamp(20px,2.4vw,36px)] w-full border-t border-white/[0.12]">
           {SKILLS_DISCIPLINES.map((item) => (
             <div
               key={item.index}
               data-anim="skill-row"
-              className="group relative flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 sm:gap-6 py-[clamp(9px,1.05vw,15px)] border-b border-white/[0.11] transition-colors duration-300 hover:border-white/30 will-change-transform"
+              className="group relative flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 sm:gap-6 py-[clamp(9px,1.05vw,15px)] border-b border-white/[0.11] transition-colors duration-300 hover:border-white/35"
             >
               <div className="flex items-baseline gap-3.5">
-                <span className="text-[clamp(8.5px,0.68vw,10.5px)] font-mono tracking-[0.2em] text-[#e61e1e]/90">
+                <span className="text-[clamp(8.5px,0.68vw,10.5px)] font-mono tracking-[0.2em] text-[#e61e1e]/90 transition-colors duration-300 group-hover:text-[#FF2A2A]">
                   {item.index}
                 </span>
-                <span className="text-[clamp(11px,0.92vw,14px)] font-medium tracking-[0.18em] text-white uppercase transition-transform duration-300 group-hover:translate-x-1">
+                <span className="text-[clamp(11px,0.92vw,14px)] font-medium tracking-[0.18em] text-white uppercase transition-transform duration-300 ease-out group-hover:translate-x-1">
                   {item.title}
                 </span>
               </div>
-              <span className="text-[clamp(9.5px,0.78vw,12px)] font-light tracking-[0.02em] text-[#b8b8b8] sm:text-right">
+              <span className="text-[clamp(9.5px,0.78vw,12px)] font-light tracking-[0.02em] text-[#b8b8b8] transition-colors duration-300 group-hover:text-white sm:text-right">
                 {item.detail}
               </span>
             </div>
@@ -93,5 +95,4 @@ export function SkillsSection({ sectionRef }: SkillsSectionProps) {
       </div>
     </section>
   );
-}
-
+});

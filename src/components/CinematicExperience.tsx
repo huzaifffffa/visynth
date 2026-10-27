@@ -143,8 +143,48 @@ function detectDeviceCapabilities() {
   };
 }
 
-export function CinematicExperience() {
+interface NavigationOverlayProps {
+  onNavigate: (section: SectionId) => void;
+  progressFillRef: React.RefObject<HTMLDivElement | null>;
+  progressContainerRef: React.RefObject<HTMLDivElement | null>;
+}
+
+const NavigationOverlay = React.memo(function NavigationOverlay({
+  onNavigate,
+  progressFillRef,
+  progressContainerRef,
+}: NavigationOverlayProps) {
   const [activeSection, setActiveSection] = useState<SectionId>("home");
+
+  useEffect(() => {
+    const handleSectionChange = (e: Event) => {
+      const customEvent = e as CustomEvent<SectionId>;
+      if (customEvent.detail) {
+        setActiveSection(customEvent.detail);
+      }
+    };
+    window.addEventListener("visynth:active-section", handleSectionChange);
+    return () =>
+      window.removeEventListener("visynth:active-section", handleSectionChange);
+  }, []);
+
+  return (
+    <>
+      <SiteNavigation
+        activeSection={activeSection}
+        onNavigate={onNavigate}
+      />
+      <ScrollProgressIndicator
+        activeSection={activeSection}
+        progressRef={progressFillRef}
+        containerRef={progressContainerRef}
+        onNavigate={onNavigate}
+      />
+    </>
+  );
+});
+
+export function CinematicExperience() {
   const activeSectionRef = useRef<SectionId>("home");
   const [areScrollSectionsMounted, setAreScrollSectionsMounted] =
     useState<boolean>(() => hasSessionPreloadCompleted());
@@ -314,7 +354,11 @@ export function CinematicExperience() {
   const scrollToSection = useCallback(
     (section: SectionId, instant = false) => {
       activeSectionRef.current = section;
-      setActiveSection(section);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("visynth:active-section", { detail: section })
+        );
+      }
 
       if (typeof window !== "undefined") {
         const hash =
@@ -776,8 +820,6 @@ export function CinematicExperience() {
     // as soon as preloader exit begins so zero ScrollTrigger layout/tween work
     // blocks the main thread during initial page load.
     // =========================================================================
-    let slice1Timer: number | null = null;
-    let slice2Timer: number | null = null;
     let timelineInitialized = false;
 
     const startTimelineSetup = () => {
@@ -792,8 +834,6 @@ export function CinematicExperience() {
         return;
       timelineInitialized = true;
 
-      slice1Timer = window.setTimeout(() => {
-      if (isCancelled || !gsapCtx) return;
       gsapCtx.add(() => {
         const tl = gsap.timeline({
           defaults: { ease: "none" },
@@ -818,12 +858,13 @@ export function CinematicExperience() {
             currentProgressRef.current = p;
             markScrollActivity();
 
-            // Schedule RAF-batched canvas draw for latest scroll position
+            // Direct synchronous canvas draw for latest scroll position in lockstep with GSAP transforms
             const targetFrame = Math.min(
               TOTAL_FRAMES - 1,
               Math.max(0, Math.round(p * (TOTAL_FRAMES - 1)))
             );
-            scheduleFrameDraw(targetFrame);
+            targetFrameRef.current = targetFrame;
+            renderFrameNow(targetFrame);
 
             // Direct DOM update for right-edge progress bar (zero React re-renders)
             if (progressFillRef.current) {
@@ -840,11 +881,13 @@ export function CinematicExperience() {
                 : "0";
             }
 
-            // Update React state only when crossing a section boundary
+            // Broadcast section boundary change to NavigationOverlay (zero full-page re-renders)
             const nextSec = getSectionFromProgress(p);
             if (nextSec !== activeSectionRef.current) {
               activeSectionRef.current = nextSec;
-              setActiveSection(nextSec);
+              window.dispatchEvent(
+                new CustomEvent("visynth:active-section", { detail: nextSec })
+              );
             }
           },
         });
@@ -1041,20 +1084,10 @@ export function CinematicExperience() {
           { autoAlpha: 0, pointerEvents: "none", duration: 1.5 },
           43
         );
-      });
 
-      slice2Timer = window.setTimeout(() => {
-        if (isCancelled || !gsapCtx) return;
-        const tl = masterTimelineRef.current;
-        if (!tl) return;
-        const workEl = workRef.current;
-        const aboutEl = aboutRef.current;
-        const contactEl = contactRef.current;
-        if (!workEl || !aboutEl || !contactEl) return;
-        gsapCtx.add(() => {
-          // =======================================================================
-          // PHASE C — WORK (t: 45 -> 70, Frames 135 -> 210 — Red Sphere Sketch)
-          // =======================================================================
+        // =======================================================================
+        // PHASE C — WORK (t: 45 -> 70, Frames 135 -> 210 — Red Sphere Sketch)
+        // =======================================================================
       const workEyebrowText = workEl.querySelector(
         '[data-anim="eyebrow-text"]'
       );
@@ -1351,14 +1384,11 @@ export function CinematicExperience() {
           92.2
         );
 
-          const st = scrollTriggerRef.current;
-          if (st) {
-            tl.progress(st.progress);
-          }
-          handleHashNavigation(true);
-        });
-      }, 16);
-      }, 0);
+        if (scrollTriggerRef.current) {
+          tl.progress(scrollTriggerRef.current.progress);
+        }
+        handleHashNavigation(true);
+      });
     };
     startTimelineSetupRef.current = startTimelineSetup;
 
@@ -1426,12 +1456,6 @@ export function CinematicExperience() {
       isCancelled = true;
       startTimelineSetupRef.current = null;
       wakeLoadersRef.current = null;
-      if (slice1Timer !== null) {
-        window.clearTimeout(slice1Timer);
-      }
-      if (slice2Timer !== null) {
-        window.clearTimeout(slice2Timer);
-      }
       if (scrollIdleTimer !== null) {
         clearTimeout(scrollIdleTimer);
       }
@@ -1470,21 +1494,11 @@ export function CinematicExperience() {
   return (
     <div className="relative w-full bg-[#000000] text-white">
       {areScrollSectionsMounted && (
-        <>
-          {/* Fixed Navigation Bar (Layer 4) */}
-          <SiteNavigation
-            activeSection={activeSection}
-            onNavigate={scrollToSection}
-          />
-
-          {/* Right-Edge Scroll Progress Indicator (Layer 4) */}
-          <ScrollProgressIndicator
-            activeSection={activeSection}
-            progressRef={progressFillRef}
-            containerRef={progressContainerRef}
-            onNavigate={scrollToSection}
-          />
-        </>
+        <NavigationOverlay
+          onNavigate={scrollToSection}
+          progressFillRef={progressFillRef}
+          progressContainerRef={progressContainerRef}
+        />
       )}
 
       {/* Pinned Master Viewport */}
@@ -1499,7 +1513,7 @@ export function CinematicExperience() {
             width={DEFAULT_FRAME_WIDTH}
             height={DEFAULT_FRAME_HEIGHT}
             aria-hidden="true"
-            className="absolute inset-0 z-0 w-full h-full pointer-events-none select-none will-change-transform"
+            className="absolute inset-0 z-0 w-full h-full pointer-events-none select-none"
           />
 
           {/* Layer 2a: Base Left-Side Vignette for Typography Readability */}

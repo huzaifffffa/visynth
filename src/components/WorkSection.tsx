@@ -35,7 +35,7 @@ const WORK_DOMAINS = [
   },
 ];
 
-export function WorkSection({
+export const WorkSection = React.memo(function WorkSection({
   sectionRef,
   onNavigateContact,
 }: WorkSectionProps) {
@@ -53,9 +53,9 @@ export function WorkSection({
     >
       <div
         data-work="container"
-        className="w-full max-w-[clamp(330px,42vw,630px)] flex flex-col items-start will-change-transform"
+        className="w-full max-w-[clamp(330px,42vw,630px)] flex flex-col items-start"
       >
-        <SectionEyebrow label="SELECTED WORK & PRACTICE" />
+        <SectionEyebrow label="02 / SELECTED WORK & PRACTICE" />
 
         <AnimatedHeading
           lines={[
@@ -72,7 +72,7 @@ export function WorkSection({
 
         <p
           data-anim="body-copy"
-          className="mt-[clamp(14px,1.6vw,24px)] max-w-[48ch] text-[clamp(10.5px,0.94vw,14.5px)] font-light leading-[1.68] tracking-[0.015em] text-[#cfcfcf] will-change-transform"
+          className="mt-[clamp(14px,1.6vw,24px)] max-w-[48ch] text-[clamp(10.5px,0.94vw,14.5px)] font-light leading-[1.68] tracking-[0.015em] text-[#cfcfcf]"
         >
           Turning ambitious vision into enduring digital form requires both
           human artistry and disciplined engineering—pushing complex ideas
@@ -85,17 +85,17 @@ export function WorkSection({
             <div
               key={item.code}
               data-anim="work-row"
-              className="group flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 sm:gap-4 py-[clamp(9px,1vw,14px)] border-b border-white/[0.14] will-change-transform"
+              className="group flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 sm:gap-4 py-[clamp(9px,1vw,14px)] border-b border-white/[0.14] transition-colors duration-300 hover:border-white/35"
             >
               <div className="flex items-baseline gap-3">
-                <span className="w-5 text-[clamp(8.5px,0.68vw,10.5px)] font-mono tracking-[0.18em] text-[#ff3333]">
+                <span className="w-5 text-[clamp(8.5px,0.68vw,10.5px)] font-mono tracking-[0.18em] text-[#ff3333] transition-colors duration-300 group-hover:text-[#FF2A2A]">
                   {item.code}
                 </span>
-                <span className="text-[clamp(10.5px,0.88vw,13.5px)] font-medium tracking-[0.18em] text-white uppercase">
+                <span className="text-[clamp(10.5px,0.88vw,13.5px)] font-medium tracking-[0.18em] text-white uppercase transition-transform duration-300 ease-out group-hover:translate-x-1">
                   {item.domain}
                 </span>
               </div>
-              <span className="text-[clamp(9px,0.75vw,11.5px)] font-light tracking-[0.03em] text-white/75 sm:text-right">
+              <span className="text-[clamp(9px,0.75vw,11.5px)] font-light tracking-[0.03em] text-white/75 transition-colors duration-300 group-hover:text-white sm:text-right">
                 {item.focus}
               </span>
             </div>
@@ -107,16 +107,17 @@ export function WorkSection({
             data-anim="work-cta"
             href="#contact"
             onClick={handleCtaClick}
-            className="inline-flex items-center gap-[clamp(12px,1.3vw,20px)] group cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/60 rounded-sm"
+            className="inline-flex items-center gap-[clamp(12px,1.3vw,20px)] group cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/60 rounded-sm py-1"
           >
-            <span className="text-[clamp(8.5px,0.72vw,11.5px)] font-semibold tracking-[0.24em] text-white uppercase">
+            <span className="text-[clamp(8.5px,0.72vw,11.5px)] font-semibold tracking-[0.24em] text-white uppercase transition-all duration-300 group-hover:tracking-[0.26em]">
               START A CONVERSATION
             </span>
-            <CtaArrowIcon />
+            <div className="transition-transform duration-300 ease-out group-hover:translate-x-1.5">
+              <CtaArrowIcon />
+            </div>
           </a>
         </div>
       </div>
     </section>
   );
-}
-
+});

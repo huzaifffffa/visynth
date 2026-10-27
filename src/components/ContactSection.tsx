@@ -56,7 +56,7 @@ export function InstagramIcon({ className = "w-4 h-4" }: { className?: string })
 
 type SubmissionStatus = "idle" | "submitting" | "success" | "error";
 
-export function ContactSection({
+export const ContactSection = React.memo(function ContactSection({
   sectionRef,
   onReturnHome,
 }: ContactSectionProps) {
@@ -189,9 +189,9 @@ export function ContactSection({
       <div className="flex-1 flex items-center w-full py-4 sm:py-6">
         <div
           data-contact="container"
-          className="w-full max-w-[clamp(330px,48vw,700px)] flex flex-col items-start will-change-transform"
+          className="w-full max-w-[clamp(330px,48vw,700px)] flex flex-col items-start"
         >
-          <SectionEyebrow label="CONTACT" />
+          <SectionEyebrow label="04 / CONTACT" />
 
           {/* Required Headline: "Let's build what comes next." */}
           <AnimatedHeading
@@ -210,7 +210,7 @@ export function ContactSection({
           {/* Required Supporting Copy: "Have an idea in mind? Let's talk." */}
           <p
             data-anim="contact-copy"
-            className="mt-[clamp(10px,1.4vw,22px)] text-[clamp(13.5px,1.3vw,20px)] font-extralight tracking-[0.02em] text-[#e2e2e2] will-change-transform"
+            className="mt-[clamp(10px,1.4vw,22px)] text-[clamp(13.5px,1.3vw,20px)] font-extralight tracking-[0.02em] text-[#e2e2e2]"
           >
             Have an idea in mind? Let&apos;s talk.
           </p>
@@ -227,7 +227,7 @@ export function ContactSection({
           <div
             data-anim="contact-action"
             data-drag-ignore="true"
-            className="mt-[clamp(16px,2vw,30px)] w-full will-change-transform"
+            className="mt-[clamp(16px,2vw,30px)] w-full"
           >
             {isSuccess ? (
               <div
@@ -538,4 +538,4 @@ export function ContactSection({
       </footer>
     </section>
   );
-}
+});

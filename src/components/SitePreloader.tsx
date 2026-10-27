@@ -10,804 +10,263 @@ import {
   waitForRevealReady,
 } from "@/lib/preloadSiteAssets";
 
-interface TypewriterSegment {
-  text: string;
-  className?: string;
-  id?: string;
-}
+const SESSION_STORAGE_KEY = "visynth_seen_v4";
 
 /**
- * Reusable DOM-driven typewriter helper that types character-by-character
- * without triggering React state re-renders.
- * Uses natural human cadence (~36ms per character, slight pause on punctuation).
+ * VISYNTH Cinematic Preloader: "FROM IDEA TO FORM"
+ *
+ * Storyboard:
+ * - Frame 01: "01 / THE IDEA" — An architectural inception line and clean typographic proposition.
+ * - Frame 02: "02 / TAKING SHAPE" — Geometric framing and directional typographic transformation.
+ * - Frame 03: "03 / THE IDENTITY" — Confident resolution into the VISYNTH wordmark climax.
+ * - Frame 04: "THE REVEAL" — Restrained editorial curtain reveal seamlessly unveiling the hero.
  */
-function createTypewriterController() {
-  const activeTimers = new Set<ReturnType<typeof setTimeout>>();
-  let isCancelled = false;
-
-  const clearAll = () => {
-    for (const timer of activeTimers) {
-      clearTimeout(timer);
-    }
-    activeTimers.clear();
-  };
-
-  const cancel = () => {
-    isCancelled = true;
-    clearAll();
-  };
-
-  const wait = (ms: number): Promise<void> =>
-    new Promise((resolve) => {
-      if (isCancelled) {
-        resolve();
-        return;
-      }
-      const timer = setTimeout(() => {
-        activeTimers.delete(timer);
-        resolve();
-      }, ms);
-      activeTimers.add(timer);
-    });
-
-  const typeIntoElement = async (
-    targetEl: HTMLElement | null,
-    text: string,
-    charIntervalMs = 36
-  ): Promise<void> => {
-    if (!targetEl || isCancelled) return;
-    targetEl.textContent = "";
-
-    for (let i = 0; i < text.length; i++) {
-      if (isCancelled) return;
-      const ch = text[i];
-      targetEl.textContent += ch;
-
-      let delay = charIntervalMs;
-      if (ch === "," || ch === "—") {
-        delay = charIntervalMs + 75;
-      } else if (ch === ".") {
-        delay = charIntervalMs + 95;
-      }
-      await wait(delay);
-    }
-  };
-
-  const typeSegments = async (
-    containerEl: HTMLElement | null,
-    segments: TypewriterSegment[],
-    charIntervalMs = 36,
-    onSegmentComplete?: (segId: string, spanEl: HTMLSpanElement) => void
-  ): Promise<void> => {
-    if (!containerEl || isCancelled) return;
-    containerEl.innerHTML = "";
-
-    const spans: { seg: TypewriterSegment; el: HTMLSpanElement }[] =
-      segments.map((seg) => {
-        const span = document.createElement("span");
-        if (seg.className) {
-          span.className = seg.className;
-        }
-        containerEl.appendChild(span);
-        return { seg, el: span };
-      });
-
-    for (const { seg, el } of spans) {
-      if (isCancelled) return;
-      for (let i = 0; i < seg.text.length; i++) {
-        if (isCancelled) return;
-        const ch = seg.text[i];
-        el.textContent = (el.textContent || "") + ch;
-
-        let delay = charIntervalMs;
-        if (ch === "," || ch === "—") {
-          delay = charIntervalMs + 65;
-        } else if (ch === ".") {
-          delay = charIntervalMs + 85;
-        }
-        await wait(delay);
-      }
-      if (seg.id && onSegmentComplete && !isCancelled) {
-        onSegmentComplete(seg.id, el);
-      }
-    }
-  };
-
-  return {
-    wait,
-    typeIntoElement,
-    typeSegments,
-    clearAll,
-    cancel,
-    isCancelled: () => isCancelled,
-  };
-}
-
 export function SitePreloader() {
-  const [isUnmounted, setIsUnmounted] = useState<boolean>(() =>
-    hasSessionPreloadCompleted()
-  );
-  const [isExiting, setIsExiting] = useState<boolean>(false);
+  const [isUnmounted, setIsUnmounted] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return (
+        window.sessionStorage.getItem(SESSION_STORAGE_KEY) === "true" ||
+        document.documentElement.classList.contains("visynth-preloaded") ||
+        hasSessionPreloadCompleted()
+      );
+    } catch {
+      return false;
+    }
+  });
 
-  // Refs for zero-rerender GSAP & DOM manipulation
+  const [isExiting, setIsExiting] = useState(false);
+
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const bgLayerRef = useRef<HTMLDivElement | null>(null);
-  const heroPreviewRef = useRef<HTMLDivElement | null>(null);
-  const scanLineRef = useRef<HTMLDivElement | null>(null);
-  const stageWrapperRef = useRef<HTMLDivElement | null>(null);
+  const curtainRef = useRef<HTMLDivElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
 
-  const logoBlockRef = useRef<HTMLDivElement | null>(null);
-  const chapterLineRef = useRef<HTMLDivElement | null>(null);
+  // Frame elements
+  const frame01Ref = useRef<HTMLDivElement | null>(null);
+  const frame01LineRef = useRef<HTMLDivElement | null>(null);
 
-  const narrativeBlockRef = useRef<HTMLDivElement | null>(null);
-  const typedTextRef = useRef<HTMLSpanElement | null>(null);
-  const cursorRef = useRef<HTMLSpanElement | null>(null);
+  const frame02Ref = useRef<HTMLDivElement | null>(null);
+  const frame02LineRef = useRef<HTMLDivElement | null>(null);
 
-  const teamCardRef = useRef<HTMLDivElement | null>(null);
-  const teamSideBarRef = useRef<HTMLDivElement | null>(null);
-  const teamTopLineRef = useRef<HTMLDivElement | null>(null);
-  const teamNameRef = useRef<HTMLDivElement | null>(null);
-  const teamRoleRef = useRef<HTMLDivElement | null>(null);
+  const frame03Ref = useRef<HTMLDivElement | null>(null);
+  const logoImgRef = useRef<HTMLDivElement | null>(null);
+  const logoSublineRef = useRef<HTMLDivElement | null>(null);
 
-  const closingBlockRef = useRef<HTMLDivElement | null>(null);
-  const closingPrimaryRef = useRef<HTMLDivElement | null>(null);
-  const closingSublineRef = useRef<HTMLDivElement | null>(null);
-  const exitSweepLineRef = useRef<HTMLDivElement | null>(null);
+  const exitDividerRef = useRef<HTMLDivElement | null>(null);
   const skipHandlerRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (hasSessionPreloadCompleted()) {
+    // If already visited this session, unlock instantly
+    if (isUnmounted) {
+      markSessionPreloadCompleted();
       return;
     }
 
+    let isDisposed = false;
     const root = rootRef.current;
     if (!root) return;
-    root.setAttribute("data-hydrated", "true");
 
-    let isDisposed = false;
-    const typewriter = createTypewriterController();
+    // Lock page scrolling while preloader is active
+    const originalOverflow = document.body.style.overflow;
+    const originalOverscroll = document.body.style.overscrollBehavior;
+    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
+
+    const unlock = () => {
+      document.body.style.overflow = originalOverflow || "";
+      document.body.style.overscrollBehavior = originalOverscroll || "";
+    };
 
     const prefersReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
-    // 1. Lock Page Scrolling & Prevent Keyboard Focus Underneath Preloader
-    const prevHtmlOverflow = document.documentElement.style.overflow;
-    const prevBodyOverflow = document.body.style.overflow;
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
+    // Preload site assets in parallel
+    const assetController = preloadSiteAssets({
+      pathname: window.location.pathname,
+      prefersReducedMotion,
+    });
 
-    const mainContentEl = document.getElementById("visynth-app-content");
-    if (mainContentEl) {
-      mainContentEl.setAttribute("inert", "");
-      mainContentEl.setAttribute("aria-hidden", "true");
-    }
-
+    // Dispatch lifecycle start event
     window.dispatchEvent(new CustomEvent("visynth:preloader-start"));
 
-    // Prevent wheel, touchmove, and scroll keys while preloader is active
-    const preventScrollEvent = (e: Event) => {
-      if (e.cancelable) {
-        e.preventDefault();
-      }
-    };
-    const preventScrollKeys = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target?.closest?.('[data-testid="preloader-skip-button"]')) {
-        return;
-      }
-      const scrollKeys = [
-        "ArrowUp",
-        "ArrowDown",
-        "PageUp",
-        "PageDown",
-        "Home",
-        "End",
-        " ",
-      ];
-      if (scrollKeys.includes(e.key)) {
-        e.preventDefault();
-      }
-    };
+    let masterTl: gsap.core.Timeline | null = null;
 
-    window.addEventListener("wheel", preventScrollEvent, { passive: false });
-    window.addEventListener("touchmove", preventScrollEvent, {
-      passive: false,
-    });
-    window.addEventListener("keydown", preventScrollKeys, { passive: false });
-
-    const unlockInteractionAndScroll = () => {
-      document.documentElement.style.overflow = prevHtmlOverflow;
-      document.body.style.overflow = prevBodyOverflow;
-      window.removeEventListener("wheel", preventScrollEvent);
-      window.removeEventListener("touchmove", preventScrollEvent);
-      window.removeEventListener("keydown", preventScrollKeys);
-
-      if (mainContentEl) {
-        mainContentEl.removeAttribute("inert");
-        mainContentEl.removeAttribute("aria-hidden");
-      }
-    };
-
-    // 2. Start Controlled Asset & Sequence Frame Preloading (deferred slightly after initial paint so LCP image has uncontested priority)
-    let assetsReady = false;
-    let storyCompleted = false;
-    let exitStarted = false;
-    let assetController: { cancel: () => void } | null = null;
-
-    const currentPathname =
-      typeof window !== "undefined" ? window.location.pathname : "/";
-
-    // 3. Coordinated Exit Transition once BOTH Story and Assets are Ready (or when Skipped)
-    const triggerExitIfReady = async (isManualSkip = false) => {
-      if (isDisposed || exitStarted) {
-        return;
-      }
-      if (!isManualSkip && (!storyCompleted || !assetsReady)) {
-        return;
-      }
-      exitStarted = true;
+    const triggerExit = async () => {
+      if (isDisposed) return;
+      setIsExiting(true);
       root.setAttribute("data-exiting", "true");
+
       window.dispatchEvent(new CustomEvent("visynth:preloader-exit-start"));
 
-      if (isManualSkip) {
-        typewriter.cancel();
-      }
+      // Fast check for hero readiness
+      await waitForRevealReady(120);
 
-      if (cursorRef.current) {
-        cursorRef.current.classList.remove("preloader-cursor-blink");
-        gsap.to(cursorRef.current, { opacity: 0, duration: 0.15 });
-      }
-
-      if (currentPathname === "/" || currentPathname === "") {
-        await waitForRevealReady(500);
-        if (isDisposed) return;
-      }
-
-      const exitTl = gsap.timeline({
-        onComplete: () => {
-          if (isDisposed) return;
-          markSessionPreloadCompleted();
-          unlockInteractionAndScroll();
-          setIsExiting(true);
-          window.dispatchEvent(new CustomEvent("visynth:preloader-complete"));
-          setIsUnmounted(true);
-        },
-      });
+      try {
+        window.sessionStorage.setItem(SESSION_STORAGE_KEY, "true");
+      } catch {}
+      markSessionPreloadCompleted();
 
       if (prefersReducedMotion) {
-        exitTl.to(root, {
+        gsap.to(root, {
           opacity: 0,
-          duration: 0.35,
+          duration: 0.2,
           ease: "power1.out",
+          onComplete: () => {
+            unlock();
+            setIsUnmounted(true);
+            window.dispatchEvent(new CustomEvent("visynth:preloader-complete"));
+          },
         });
         return;
       }
 
-      // If skipped manually, exit immediately without the 500ms hold; otherwise hold final line ~500ms
-      const holdDuration = isManualSkip ? 0 : 0.5;
-      const fadeDuration = isManualSkip ? 0.55 : 0.9;
+      // Frame 04: The Reveal — Editorial curtain lift with horizontal crimson sweep
+      const exitTl = gsap.timeline({
+        onComplete: () => {
+          unlock();
+          setIsUnmounted(true);
+          window.dispatchEvent(new CustomEvent("visynth:preloader-complete"));
+        },
+      });
 
-      exitTl
-        .to({}, { duration: holdDuration })
-        .fromTo(
-          exitSweepLineRef.current,
-          { scaleX: 0, opacity: 0.95 },
-          {
-            scaleX: 1,
-            opacity: 1,
-            duration: isManualSkip ? 0.35 : 0.48,
-            ease: "power3.inOut",
-          }
-        )
-        .to(
-          bgLayerRef.current,
-          {
-            scale: 1.03,
-            duration: fadeDuration,
-            ease: "power2.inOut",
-          },
-          "-=0.18"
-        )
-        .to(
-          root,
-          {
-            opacity: 0,
-            duration: fadeDuration,
-            ease: "power2.inOut",
-          },
-          "<"
+      if (exitDividerRef.current) {
+        exitTl.fromTo(
+          exitDividerRef.current,
+          { scaleX: 0, opacity: 0 },
+          { scaleX: 1, opacity: 1, duration: 0.2, ease: "power3.inOut" }
         );
+      }
+
+      if (curtainRef.current) {
+        exitTl.to(
+          curtainRef.current,
+          {
+            clipPath: "inset(0% 0% 100% 0%)",
+            duration: 0.32,
+            ease: "power4.inOut",
+          },
+          "-=0.1"
+        );
+      }
+
+      exitTl.to(
+        root,
+        {
+          opacity: 0,
+          duration: 0.15,
+          ease: "none",
+        },
+        "-=0.1"
+      );
     };
 
     skipHandlerRef.current = () => {
-      storyCompleted = true;
-      assetsReady = true;
-      triggerExitIfReady(true);
+      if (masterTl) {
+        masterTl.kill();
+      }
+      triggerExit();
     };
 
-    const preloadDelayTimer = window.setTimeout(() => {
-      if (isDisposed) return;
-      const ctrl = preloadSiteAssets({
-        pathname: currentPathname,
-        prefersReducedMotion,
-        safetyTimeoutMs: 15000,
-        onFirstFrameLoaded: (img) => {
-          if (isDisposed || !heroPreviewRef.current) return;
-          heroPreviewRef.current.style.backgroundImage = `url(${img.src})`;
-          heroPreviewRef.current.style.opacity = "0.09";
-        },
-      });
-      assetController = ctrl;
-      ctrl.promise.then(() => {
-        if (isDisposed) return;
-        assetsReady = true;
-        triggerExitIfReady();
-      });
-    }, prefersReducedMotion ? 0 : 250);
-
-    // 4. Blinking Cursor & Subtle Moving Light Line run via pure compositor-thread CSS @keyframes
-
-    // 5. Execute Story Sequence
-    const runStorySequence = async () => {
-      const logoBlock = logoBlockRef.current;
-      const chapterLine = chapterLineRef.current;
-      const narrativeBlock = narrativeBlockRef.current;
-      const typedText = typedTextRef.current;
-      const cursor = cursorRef.current;
-      const teamCard = teamCardRef.current;
-      const teamSideBar = teamSideBarRef.current;
-      const teamTopLine = teamTopLineRef.current;
-      const teamName = teamNameRef.current;
-      const teamRole = teamRoleRef.current;
-      const closingBlock = closingBlockRef.current;
-      const closingPrimary = closingPrimaryRef.current;
-      const closingSubline = closingSublineRef.current;
-
-      if (
-        !logoBlock ||
-        !chapterLine ||
-        !narrativeBlock ||
-        !typedText ||
-        !teamCard ||
-        !teamName ||
-        !teamRole ||
-        !closingBlock ||
-        !closingPrimary ||
-        !closingSubline
-      ) {
-        storyCompleted = true;
-        triggerExitIfReady();
-        return;
+    // Keyboard shortcut (Escape skips intro)
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        skipHandlerRef.current?.();
       }
-
-      // Reduced-Motion Fast Static Story Path (no character-by-character typing)
-      if (prefersReducedMotion) {
-        if (cursor) cursor.style.opacity = "0";
-        gsap.set(chapterLine, { scaleX: 1, opacity: 1 });
-
-        typedText.textContent =
-          "We turn imagination into identity, motion, experience, and technology.";
-        gsap.set(narrativeBlock, { opacity: 1 });
-        await typewriter.wait(450);
-        if (isDisposed) return;
-
-        const reducedMembers = [
-          {
-            line: "A direction gives the vision its purpose.",
-            name: "HUZAIFA MANZOOR",
-            role: "CHIEF HEAD",
-          },
-          {
-            line: "A creative mind gives the idea its form.",
-            name: "MUHAMMAD ANAS",
-            role: "CREATIVE HEAD",
-          },
-          {
-            line: "A strong message finds the people who need it.",
-            name: "SHAYAN KHAN",
-            role: "MARKETING HEAD",
-          },
-          {
-            line: "A connection turns interest into opportunity.",
-            name: "FUZAIL AIJAZ",
-            role: "SALES HEAD",
-          },
-        ];
-
-        gsap.set(teamCard, { opacity: 1, x: 0, y: 0, scale: 1 });
-        gsap.set(teamSideBar, { scaleY: 1, opacity: 1 });
-        gsap.set(teamRole, { opacity: 1, y: 0 });
-
-        for (const m of reducedMembers) {
-          typedText.textContent = m.line;
-          teamName.textContent = m.name;
-          teamRole.textContent = m.role;
-          await typewriter.wait(320);
-          if (isDisposed) return;
-        }
-
-        gsap.set([narrativeBlock, teamCard, chapterLine], {
-          opacity: 0,
-        });
-        gsap.set(closingBlock, { opacity: 1 });
-        closingPrimary.innerHTML = `Different minds. <span class="text-[#FF2A2A]">ONE VISION.</span>`;
-        gsap.set(closingSubline, { opacity: 1, y: 0 });
-        await typewriter.wait(450);
-        if (isDisposed) return;
-
-        storyCompleted = true;
-        triggerExitIfReady();
-        return;
-      }
-
-      // =====================================================================
-      // SCENE 1 — Opening (~1.2s)
-      // "Every vision begins as a signal."
-      // =====================================================================
-      await typewriter.wait(160);
-      if (isDisposed) return;
-
-      await typewriter.typeIntoElement(
-        typedText,
-        "Every vision begins as a signal.",
-        26
-      );
-      await typewriter.wait(280);
-      if (isDisposed) return;
-
-      // =====================================================================
-      // SCENE 2 — Company introduction (~1.4s)
-      // "VISYNTH was created for ideas that refuse to stay ordinary."
-      // =====================================================================
-      await gsap.to(narrativeBlock, {
-        opacity: 0,
-        y: -4,
-        duration: 0.16,
-        ease: "power1.in",
-      });
-      if (isDisposed) return;
-
-      typedText.textContent = "";
-      gsap.set(narrativeBlock, { opacity: 1, y: 0 });
-      gsap.fromTo(
-        chapterLine,
-        { scaleX: 0, opacity: 0.9 },
-        { scaleX: 1, opacity: 1, duration: 0.65, ease: "power2.out" }
-      );
-
-      await typewriter.typeIntoElement(
-        typedText,
-        "VISYNTH was created for ideas that refuse to stay ordinary.",
-        20
-      );
-      await typewriter.wait(240);
-      if (isDisposed) return;
-
-      // =====================================================================
-      // SCENE 3 — Company philosophy (~1.5s)
-      // "We turn imagination into identity, motion, experience, and technology."
-      // Highlight identity, motion, experience, technology in crimson one at a time
-      // =====================================================================
-      await gsap.to(narrativeBlock, {
-        opacity: 0,
-        duration: 0.15,
-        ease: "power1.in",
-      });
-      if (isDisposed) return;
-
-      typedText.innerHTML = "";
-      gsap.set(narrativeBlock, { opacity: 1 });
-
-      await typewriter.typeSegments(
-        typedText,
-        [
-          { text: "We turn imagination into " },
-          {
-            id: "identity",
-            text: "identity",
-            className: "transition-colors duration-200",
-          },
-          { text: ", " },
-          {
-            id: "motion",
-            text: "motion",
-            className: "transition-colors duration-200",
-          },
-          { text: ", " },
-          {
-            id: "experience",
-            text: "experience",
-            className: "transition-colors duration-200",
-          },
-          { text: ", and " },
-          {
-            id: "technology",
-            text: "technology",
-            className: "transition-colors duration-200",
-          },
-          { text: "." },
-        ],
-        17,
-        (_id, spanEl) => {
-          spanEl.style.color = "#FF2A2A";
-          spanEl.style.textShadow = "0 0 14px rgba(255,42,42,0.35)";
-        }
-      );
-      await typewriter.wait(260);
-      if (isDisposed) return;
-
-      // =====================================================================
-      // SCENE 4 — Team introduction (~1.2s)
-      // "Behind every frame is a different perspective."
-      // -> "Together, those perspectives become one vision."
-      // =====================================================================
-      await gsap.to(narrativeBlock, {
-        opacity: 0,
-        duration: 0.15,
-        ease: "power1.in",
-      });
-      if (isDisposed) return;
-
-      typedText.textContent = "";
-      gsap.set(narrativeBlock, { opacity: 1 });
-      await typewriter.typeIntoElement(
-        typedText,
-        "Behind every frame is a different perspective.",
-        16
-      );
-      await typewriter.wait(180);
-      if (isDisposed) return;
-
-      await gsap.to(narrativeBlock, {
-        opacity: 0,
-        duration: 0.14,
-        ease: "power1.inOut",
-      });
-      if (isDisposed) return;
-
-      typedText.textContent = "";
-      gsap.set(narrativeBlock, { opacity: 1 });
-      await typewriter.typeIntoElement(
-        typedText,
-        "Together, those perspectives become one vision.",
-        16
-      );
-      await typewriter.wait(200);
-      if (isDisposed) return;
-
-      // =====================================================================
-      // SCENE 5 — Team member: Huzaifa (~1.3s)
-      // Intro: "A direction gives the vision its purpose."
-      // Card: HUZAIFA MANZOOR — CHIEF HEAD
-      // Motion: Horizontal slide ~20px, thin crimson line beside name, role delayed
-      // =====================================================================
-      await gsap.to(narrativeBlock, { opacity: 0, duration: 0.14 });
-      if (isDisposed) return;
-
-      typedText.textContent = "";
-      gsap.set(narrativeBlock, { opacity: 1 });
-      gsap.set(teamCard, {
-        opacity: 1,
-        x: -20,
-        y: 0,
-        scale: 1,
-      });
-      gsap.set(teamSideBar, {
-        scaleY: 0,
-        opacity: 1,
-      });
-      gsap.set(teamTopLine, { scaleX: 0, opacity: 0 });
-      teamName.textContent = "";
-      teamRole.textContent = "CHIEF HEAD";
-      gsap.set(teamRole, { opacity: 0, y: 6 });
-
-      gsap.to(teamCard, { x: 0, duration: 0.45, ease: "power2.out" });
-      gsap.to(teamSideBar, {
-        scaleY: 1,
-        duration: 0.4,
-        ease: "power2.out",
-      });
-
-      await typewriter.typeIntoElement(
-        typedText,
-        "A direction gives the vision its purpose.",
-        16
-      );
-      await typewriter.typeIntoElement(teamName, "HUZAIFA MANZOOR", 22);
-      gsap.to(teamRole, {
-        opacity: 1,
-        y: 0,
-        duration: 0.25,
-        ease: "power2.out",
-      });
-      await typewriter.wait(280);
-      if (isDisposed) return;
-
-      // =====================================================================
-      // SCENE 6 — Team member: Muhammad (~1.3s)
-      // Intro: "A creative mind gives the idea its form."
-      // Card: MUHAMMAD ANAS — CREATIVE HEAD
-      // Motion: Soft fade and upward movement
-      // =====================================================================
-      await gsap.to([narrativeBlock, teamCard], {
-        opacity: 0,
-        duration: 0.14,
-      });
-      if (isDisposed) return;
-
-      typedText.textContent = "";
-      teamName.textContent = "";
-      teamRole.textContent = "CREATIVE HEAD";
-      gsap.set(narrativeBlock, { opacity: 1 });
-      gsap.set(teamCard, { opacity: 0, x: 0, y: 16, scale: 1 });
-      gsap.set(teamRole, { opacity: 0, y: 6 });
-
-      gsap.to(teamCard, {
-        opacity: 1,
-        y: 0,
-        duration: 0.45,
-        ease: "power2.out",
-      });
-
-      await typewriter.typeIntoElement(
-        typedText,
-        "A creative mind gives the idea its form.",
-        16
-      );
-      await typewriter.typeIntoElement(teamName, "MUHAMMAD ANAS", 22);
-      gsap.to(teamRole, {
-        opacity: 1,
-        y: 0,
-        duration: 0.25,
-        ease: "power2.out",
-      });
-      await typewriter.wait(280);
-      if (isDisposed) return;
-
-      // =====================================================================
-      // SCENE 7 — Team member: Shayan (~1.3s)
-      // Intro: "A strong message finds the people who need it."
-      // Card: SHAYAN KHAN — MARKETING HEAD
-      // Motion: Left-to-right line animation and typewriter reveal
-      // =====================================================================
-      await gsap.to([narrativeBlock, teamCard], {
-        opacity: 0,
-        duration: 0.14,
-      });
-      if (isDisposed) return;
-
-      typedText.textContent = "";
-      teamName.textContent = "";
-      teamRole.textContent = "MARKETING HEAD";
-      gsap.set(narrativeBlock, { opacity: 1 });
-      gsap.set(teamCard, { opacity: 1, x: 0, y: 0, scale: 1 });
-      gsap.set(teamTopLine, { scaleX: 0, opacity: 1 });
-      gsap.set(teamRole, { opacity: 0, y: 6 });
-
-      gsap.to(teamTopLine, {
-        scaleX: 1,
-        duration: 0.45,
-        ease: "power2.out",
-      });
-
-      await typewriter.typeIntoElement(
-        typedText,
-        "A strong message finds the people who need it.",
-        15
-      );
-      await typewriter.typeIntoElement(teamName, "SHAYAN KHAN", 22);
-      gsap.to(teamRole, {
-        opacity: 1,
-        y: 0,
-        duration: 0.25,
-        ease: "power2.out",
-      });
-      await typewriter.wait(280);
-      if (isDisposed) return;
-
-      // =====================================================================
-      // SCENE 8 — Team member: Fuzail (~1.3s)
-      // Intro: "A connection turns interest into opportunity."
-      // Card: FUZAIL AIJAZ — SALES HEAD
-      // Motion: Soft scale from 0.98 to 1 and fade in role below
-      // =====================================================================
-      await gsap.to([narrativeBlock, teamCard], {
-        opacity: 0,
-        duration: 0.14,
-      });
-      if (isDisposed) return;
-
-      typedText.textContent = "";
-      teamName.textContent = "";
-      teamRole.textContent = "SALES HEAD";
-      gsap.set(teamTopLine, { scaleX: 0, opacity: 0 });
-      gsap.set(narrativeBlock, { opacity: 1 });
-      gsap.set(teamCard, { opacity: 0, x: 0, y: 0, scale: 0.98 });
-      gsap.set(teamRole, { opacity: 0, y: 6 });
-
-      gsap.to(teamCard, {
-        opacity: 1,
-        scale: 1,
-        duration: 0.45,
-        ease: "power2.out",
-      });
-
-      await typewriter.typeIntoElement(
-        typedText,
-        "A connection turns interest into opportunity.",
-        16
-      );
-      await typewriter.typeIntoElement(teamName, "FUZAIL AIJAZ", 22);
-      gsap.to(teamRole, {
-        opacity: 1,
-        y: 0,
-        duration: 0.25,
-        ease: "power2.out",
-      });
-      await typewriter.wait(280);
-      if (isDisposed) return;
-
-      // =====================================================================
-      // SCENE 9 — Closing statement (~1.5s)
-      // Fade out team info, center closing statement:
-      // "Different minds. One vision." (ONE VISION crimson)
-      // Reveal "VISYNTH — WHERE VISION BECOMES GROWTH." underneath
-      // Stop cursor blinking after final line
-      // =====================================================================
-      await gsap.to([narrativeBlock, teamCard, chapterLine], {
-        opacity: 0,
-        duration: 0.22,
-        ease: "power2.inOut",
-      });
-      if (isDisposed) return;
-
-      gsap.set(closingBlock, { opacity: 1 });
-      gsap.set(closingSubline, { opacity: 0, y: 10 });
-
-      await typewriter.typeSegments(
-        closingPrimary,
-        [
-          { text: "Different minds. ", className: "text-[#F5F5F5]" },
-          {
-            id: "one-vision",
-            text: "ONE VISION.",
-            className:
-              "text-[#FF2A2A] font-medium drop-shadow-[0_0_16px_rgba(255,42,42,0.35)]",
-          },
-        ],
-        28
-      );
-
-      // Stop cursor blinking after the final line is typed
-      if (cursor) {
-        cursor.classList.remove("preloader-cursor-blink");
-        cursor.style.opacity = "0";
-      }
-
-      await gsap.to(closingSubline, {
-        opacity: 1,
-        y: 0,
-        duration: 0.45,
-        ease: "power2.out",
-      });
-      await typewriter.wait(250);
-      if (isDisposed) return;
-
-      storyCompleted = true;
-      triggerExitIfReady();
     };
+    window.addEventListener("keydown", onKeyDown);
 
-    runStorySequence();
+    if (prefersReducedMotion) {
+      // Reduced motion: immediate resolution
+      gsap.set(frame01Ref.current, { display: "none" });
+      gsap.set(frame02Ref.current, { display: "none" });
+      gsap.set(frame03Ref.current, { opacity: 1, display: "flex" });
+      setTimeout(triggerExit, 250);
+      return;
+    }
+
+    // =========================================================================
+    // The "FROM IDEA TO FORM" Choreography Timeline (~0.95s total)
+    // =========================================================================
+    masterTl = gsap.timeline({
+      defaults: { ease: "power3.out" },
+      onComplete: triggerExit,
+    });
+
+    // FRAME 01 — THE IDEA (0.0s -> 0.3s)
+    masterTl
+      .fromTo(
+        frame01Ref.current,
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.18 }
+      )
+      .fromTo(
+        frame01LineRef.current,
+        { scaleX: 0 },
+        { scaleX: 1, duration: 0.22, ease: "power2.inOut" },
+        "-=0.14"
+      )
+      .to(
+        frame01Ref.current,
+        { opacity: 0, y: -6, duration: 0.14, ease: "power2.in" },
+        "+=0.08"
+      )
+
+      // FRAME 02 — THE TRANSFORMATION / TAKING SHAPE (0.3s -> 0.62s)
+      .fromTo(
+        frame02Ref.current,
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.18 }
+      )
+      .fromTo(
+        frame02LineRef.current,
+        { scaleX: 0 },
+        { scaleX: 1, duration: 0.22, ease: "power2.inOut" },
+        "-=0.14"
+      )
+      .to(
+        frame02Ref.current,
+        { opacity: 0, y: -6, duration: 0.14, ease: "power2.in" },
+        "+=0.08"
+      )
+
+      // FRAME 03 — THE IDENTITY: VISYNTH (0.62s -> 0.95s)
+      .fromTo(
+        frame03Ref.current,
+        { opacity: 0 },
+        { opacity: 1, duration: 0.14 }
+      )
+      .fromTo(
+        logoImgRef.current,
+        { opacity: 0, scale: 0.95, y: 8 },
+        { opacity: 1, scale: 1, y: 0, duration: 0.24, ease: "back.out(1.2)" },
+        "-=0.08"
+      )
+      .fromTo(
+        logoSublineRef.current,
+        { opacity: 0, y: 4 },
+        { opacity: 1, y: 0, duration: 0.16 },
+        "-=0.12"
+      )
+      // Concise climax hold
+      .to({}, { duration: 0.16 });
+
+    // Safety timeout: never hold users on loading screen longer than 3.2s
+    const safetyTimer = setTimeout(() => {
+      if (!isDisposed && !root.getAttribute("data-exiting")) {
+        triggerExit();
+      }
+    }, 3200);
 
     return () => {
       isDisposed = true;
-      window.clearTimeout(preloadDelayTimer);
-      typewriter.cancel();
-      assetController?.cancel();
-      unlockInteractionAndScroll();
+      clearTimeout(safetyTimer);
+      window.removeEventListener("keydown", onKeyDown);
+      masterTl?.kill();
+      assetController.cancel();
+      unlock();
     };
-  }, []);
+  }, [isUnmounted]);
 
   if (isUnmounted) {
     return null;
@@ -820,170 +279,171 @@ export function SitePreloader() {
       aria-live="polite"
       aria-hidden={isExiting ? "true" : undefined}
       data-testid="site-preloader"
-      className={`fixed inset-0 z-[9999] w-screen h-[100dvh] min-h-screen overflow-hidden bg-[#050505] text-[#F5F5F5] select-none flex items-center justify-center px-[24px] md:px-[8vw] ${
+      className={`fixed inset-0 z-[9999] w-screen h-[100dvh] min-h-screen overflow-hidden bg-[#050505] text-[#F5F5F5] select-none ${
         isExiting ? "pointer-events-none" : "pointer-events-auto"
       }`}
     >
-      {/* Concise Screen Reader Accessible Announcement (Never announces per-character typing) */}
-      <span className="sr-only">VISYNTH experience is opening.</span>
+      {/* Screen Reader Announcement */}
+      <span className="sr-only">
+        VISYNTH — Creative Technology Studio. From idea to form.
+      </span>
 
-      {/* Background Layer (Scales 1 -> 1.03 on exit) */}
+      {/* Main Masked Curtain Container for Clean Editorial Reveal */}
       <div
-        ref={bgLayerRef}
-        aria-hidden="true"
-        className="absolute inset-0 w-full h-full pointer-events-none will-change-transform"
+        ref={curtainRef}
+        className="relative w-full h-full flex items-center justify-center [clip-path:inset(0%_0%_0%_0%)] will-change-[clip-path]"
       >
-        {/* Low-opacity preview of Frame 1 once decoded */}
+        {/* Subtle Architectural Corner Crosshairs & Fine Border Lines */}
         <div
-          ref={heroPreviewRef}
-          className="absolute inset-0 w-full h-full bg-cover bg-center opacity-0 scale-105 transition-opacity duration-1000 ease-out"
-        />
-
-        {/* Deep Dark Vignette + Subtle Lower-Right / Center-Right Crimson Atmospheric Glow */}
-        <div
-          className="absolute inset-0 w-full h-full"
-          style={{
-            background:
-              "radial-gradient(circle at 74% 62%, rgba(230, 30, 30, 0.14) 0%, rgba(255, 42, 42, 0.05) 32%, rgba(5, 5, 5, 0.94) 68%, #050505 100%)",
-          }}
-        />
-
-        {/* Faint Moving Horizontal Scan Line */}
-        <div
-          ref={scanLineRef}
-          className="preloader-scan-line absolute inset-x-0 top-0 h-[1px] w-full bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-5"
-        />
-
-        {/* Top & Bottom Fine Architectural Framing Lines */}
-        <div className="absolute top-[7vh] inset-x-[6vw] h-[1px] bg-white/[0.06]" />
-        <div className="absolute bottom-[7vh] inset-x-[6vw] h-[1px] bg-white/[0.06]" />
-      </div>
-
-      {/* Main Story Stage Container (Desktop: max-w-[720px], Mobile: w-[calc(100vw-48px)]) */}
-      <div
-        ref={stageWrapperRef}
-        aria-hidden="true"
-        className="relative z-10 w-[calc(100vw-48px)] md:w-full max-w-[720px] flex flex-col items-start justify-center"
-      >
-        {/* Brand Header Block: Logo + Studio Label */}
-        <div
-          ref={logoBlockRef}
-          className="preloader-logo-entrance flex flex-col items-start gap-2.5 mb-7"
+          aria-hidden="true"
+          className="absolute inset-0 pointer-events-none overflow-hidden"
         >
-          <div className="flex items-center gap-3">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#E61E1E] shadow-[0_0_10px_rgba(255,42,42,0.75)]" />
-            <span className="text-[10px] font-mono tracking-[0.32em] uppercase text-[rgba(245,245,245,0.62)]">
-              CREATIVE TECHNOLOGY STUDIO
-            </span>
-          </div>
-
-          <Image
-            src="/visynth-logo.png"
-            alt="VISYNTH"
-            width={936}
-            height={130}
-            priority
-            fetchPriority="high"
-            sizes="(max-width: 768px) 180px, 240px"
-            className="w-[168px] md:w-[212px] h-auto object-contain drop-shadow-[0_0_18px_rgba(255,42,42,0.28)]"
+          {/* Subtle Radial Crimson Atmospheric Glow */}
+          <div
+            className="absolute inset-0 w-full h-full"
+            style={{
+              background:
+                "radial-gradient(circle at 50% 50%, rgba(230, 30, 30, 0.12) 0%, rgba(5, 5, 5, 0.95) 60%, #050505 100%)",
+            }}
           />
+          {/* Architectural Perimeter Frame Lines */}
+          <div className="absolute top-[6vh] inset-x-[6vw] h-[1px] bg-white/[0.07]" />
+          <div className="absolute bottom-[6vh] inset-x-[6vw] h-[1px] bg-white/[0.07]" />
+          <div className="absolute left-[6vw] inset-y-[6vh] w-[1px] bg-white/[0.07]" />
+          <div className="absolute right-[6vw] inset-y-[6vh] w-[1px] bg-white/[0.07]" />
+
+          {/* Corner Crosshairs */}
+          <span className="absolute top-[5.2vh] left-[5.4vw] text-[10px] font-mono text-white/30">
+            +
+          </span>
+          <span className="absolute top-[5.2vh] right-[5.4vw] text-[10px] font-mono text-white/30">
+            +
+          </span>
+          <span className="absolute bottom-[5.2vh] left-[5.4vw] text-[10px] font-mono text-white/30">
+            +
+          </span>
+          <span className="absolute bottom-[5.2vh] right-[5.4vw] text-[10px] font-mono text-white/30">
+            +
+          </span>
         </div>
 
-        {/* Thin Crimson Chapter Line (Scales 0 -> 1 in Scene 2 without layout reflow) */}
+        {/* Central Stage Container */}
         <div
-          ref={chapterLineRef}
-          className="h-[1px] w-[90px] origin-left scale-x-0 bg-gradient-to-r from-[#FF2A2A] via-[#E61E1E] to-transparent shadow-[0_0_12px_rgba(255,42,42,0.35)] mb-6"
-        />
-
-        {/* Narrative Typewriter Block (Mobile: calc(100vw - 48px) 18-24px, Desktop: max-w-[620px]) */}
-        <div
-          ref={narrativeBlockRef}
-          className="w-[calc(100vw-48px)] md:w-full md:max-w-[620px] min-h-[104px] md:min-h-[76px] flex items-start"
+          ref={stageRef}
+          aria-hidden="true"
+          className="relative z-10 w-[calc(100vw-48px)] max-w-[680px] min-h-[220px] flex items-center justify-center text-center"
         >
-          <p className="text-[clamp(18px,4.5vw,24px)] md:text-[clamp(20px,2vw,24px)] font-light leading-[1.48] tracking-[0.02em] text-[#F5F5F5]">
-            <span ref={typedTextRef} data-testid="preloader-typed-text" />
-            <span
-              ref={cursorRef}
-              className="preloader-cursor-blink inline-block w-[2px] h-[1.08em] bg-[#FF2A2A] align-middle ml-1.5 shadow-[0_0_8px_rgba(255,42,42,0.6)]"
-            />
-          </p>
-        </div>
-
-        {/* Team Member Feature Card (Scenes 5–8; reserved height prevents layout shift) */}
-        <div
-          ref={teamCardRef}
-          className="mt-6 min-h-[68px] flex items-stretch gap-4 opacity-0 pointer-events-none will-change-transform"
-        >
-          {/* Vertical Crimson Accent Line Beside Name */}
+          {/* ================================================================= */}
+          {/* FRAME 01 — THE IDEA                                               */}
+          {/* ================================================================= */}
           <div
-            ref={teamSideBarRef}
-            className="w-[2px] bg-[#E61E1E] origin-top scale-y-0 shadow-[0_0_12px_rgba(255,42,42,0.45)]"
-          />
-
-          <div className="flex flex-col justify-center py-0.5">
-            {/* Optional Left-to-Right Top Line (Scene 7) */}
-            <div
-              ref={teamTopLineRef}
-              className="h-[1px] w-[72px] origin-left scale-x-0 opacity-0 bg-[#FF2A2A] mb-2 shadow-[0_0_8px_rgba(255,42,42,0.4)]"
-            />
-
-            <div
-              ref={teamNameRef}
-              data-testid="preloader-team-name"
-              className="text-[clamp(22px,4.8vw,30px)] font-semibold tracking-[0.18em] uppercase text-[#F5F5F5] leading-tight min-h-[1.25em]"
-            />
-            <div
-              ref={teamRoleRef}
-              data-testid="preloader-team-role"
-              className="mt-1.5 text-[11px] sm:text-xs font-mono tracking-[0.28em] uppercase text-[#FF2A2A] drop-shadow-[0_0_10px_rgba(255,42,42,0.35)] min-h-[1.2em]"
-            />
-          </div>
-        </div>
-
-        {/* Scene 9 — Centered Closing Statement (Overlayed inside stageWrapper so height never shifts) */}
-        <div
-          ref={closingBlockRef}
-          className="absolute inset-x-0 top-1/2 -translate-y-1/2 w-[calc(100vw-48px)] md:w-full md:max-w-[620px] flex flex-col items-center text-center self-center py-4 opacity-0 pointer-events-none"
-        >
-          <div
-            ref={closingPrimaryRef}
-            data-testid="preloader-closing-primary"
-            className="text-[clamp(26px,5.2vw,38px)] font-light tracking-[0.08em] uppercase text-[#F5F5F5] leading-snug"
-          />
-
-          <div
-            ref={closingSublineRef}
-            data-testid="preloader-closing-subline"
-            className="mt-4 text-[clamp(12px,2.6vw,15px)] font-mono tracking-[0.28em] uppercase text-[rgba(245,245,245,0.62)]"
+            ref={frame01Ref}
+            className="absolute inset-0 flex flex-col items-center justify-center opacity-0 pointer-events-none"
           >
-            VISYNTH — WHERE VISION BECOMES GROWTH.
+            <div className="flex items-center gap-2 mb-4">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#E61E1E] shadow-[0_0_8px_rgba(255,42,42,0.8)]" />
+              <span className="text-[10.5px] sm:text-xs font-mono tracking-[0.34em] uppercase text-white/50">
+                01 / THE IDEA
+              </span>
+            </div>
+
+            <p className="text-[clamp(20px,4.5vw,32px)] font-light tracking-[0.04em] uppercase text-[#F5F5F5] leading-tight">
+              THE INCEPTION OF VISION.
+            </p>
+
+            <div
+              ref={frame01LineRef}
+              className="mt-6 h-[1px] w-[110px] origin-center scale-x-0 bg-gradient-to-r from-transparent via-[#FF2A2A] to-transparent shadow-[0_0_10px_rgba(255,42,42,0.4)]"
+            />
+          </div>
+
+          {/* ================================================================= */}
+          {/* FRAME 02 — THE TRANSFORMATION / TAKING SHAPE                     */}
+          {/* ================================================================= */}
+          <div
+            ref={frame02Ref}
+            className="absolute inset-0 flex flex-col items-center justify-center opacity-0 pointer-events-none"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#E61E1E] shadow-[0_0_8px_rgba(255,42,42,0.8)]" />
+              <span className="text-[10.5px] sm:text-xs font-mono tracking-[0.34em] uppercase text-white/50">
+                02 / TAKING SHAPE
+              </span>
+            </div>
+
+            <p className="text-[clamp(20px,4.5vw,32px)] font-light tracking-[0.04em] uppercase text-[#F5F5F5] leading-tight">
+              PRECISION IN FORM AND MOTION.
+            </p>
+
+            <div
+              ref={frame02LineRef}
+              className="mt-6 h-[1px] w-[180px] origin-center scale-x-0 bg-gradient-to-r from-transparent via-[#FF2A2A] to-transparent shadow-[0_0_12px_rgba(255,42,42,0.5)]"
+            />
+          </div>
+
+          {/* ================================================================= */}
+          {/* FRAME 03 — THE IDENTITY: VISYNTH WORDMARK (CLIMAX)               */}
+          {/* ================================================================= */}
+          <div
+            ref={frame03Ref}
+            className="absolute inset-0 flex flex-col items-center justify-center opacity-0 pointer-events-none"
+          >
+            <div className="flex items-center gap-2 mb-5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#E61E1E] shadow-[0_0_8px_rgba(255,42,42,0.8)]" />
+              <span className="text-[10px] sm:text-[11px] font-mono tracking-[0.36em] uppercase text-white/60">
+                03 / CREATIVE TECHNOLOGY STUDIO
+              </span>
+            </div>
+
+            <div
+              ref={logoImgRef}
+              className="relative select-none pointer-events-none opacity-0 drop-shadow-[0_0_24px_rgba(255,42,42,0.32)]"
+            >
+              <Image
+                src="/visynth-logo.png"
+                alt="VISYNTH"
+                width={936}
+                height={130}
+                priority
+                fetchPriority="high"
+                sizes="(max-width: 768px) 180px, 240px"
+                className="w-[185px] sm:w-[230px] md:w-[260px] h-auto object-contain"
+              />
+            </div>
+
+            <div
+              ref={logoSublineRef}
+              className="mt-6 text-[10px] sm:text-xs font-mono tracking-[0.32em] uppercase text-white/60 opacity-0"
+            >
+              WHERE VISION BECOMES GROWTH
+            </div>
           </div>
         </div>
+
+        {/* Bottom-Right Skip Button */}
+        <button
+          type="button"
+          onMouseEnter={() =>
+            window.dispatchEvent(new CustomEvent("visynth:preload-experience"))
+          }
+          onFocus={() =>
+            window.dispatchEvent(new CustomEvent("visynth:preload-experience"))
+          }
+          onClick={() => skipHandlerRef.current?.()}
+          data-testid="preloader-skip-button"
+          aria-label="Skip intro"
+          className="absolute bottom-6 right-6 md:bottom-10 md:right-[6vw] z-20 px-3 py-1.5 bg-transparent border-0 text-[10.5px] sm:text-xs font-mono tracking-[0.28em] uppercase text-[#F5F5F5] hover:text-[#FF2A2A] hover:[text-shadow:0_0_14px_rgba(255,42,42,0.9),0_0_28px_rgba(230,30,30,0.65)] focus-visible:outline-none focus-visible:text-[#FF2A2A] focus-visible:[text-shadow:0_0_14px_rgba(255,42,42,0.9)] transition-all duration-300 cursor-pointer"
+        >
+          SKIP
+        </button>
+
+        {/* Full-Screen Horizontal Crimson Exit Divider Line */}
+        <div
+          ref={exitDividerRef}
+          aria-hidden="true"
+          className="absolute left-0 right-0 top-0 h-[2px] w-full origin-center scale-x-0 opacity-0 bg-gradient-to-r from-transparent via-[#FF2A2A] to-transparent shadow-[0_0_18px_rgba(255,42,42,0.8)] pointer-events-none"
+        />
       </div>
-
-      {/* Bottom-Right Skip Button */}
-      <button
-        type="button"
-        onMouseEnter={() =>
-          window.dispatchEvent(new CustomEvent("visynth:preload-experience"))
-        }
-        onFocus={() =>
-          window.dispatchEvent(new CustomEvent("visynth:preload-experience"))
-        }
-        onClick={() => skipHandlerRef.current?.()}
-        data-testid="preloader-skip-button"
-        aria-label="Skip intro"
-        className="absolute bottom-6 right-6 md:bottom-10 md:right-[6vw] z-20 px-2 py-1 bg-transparent border-0 text-[11px] sm:text-xs font-mono tracking-[0.28em] uppercase text-[#F5F5F5] hover:text-[#FF2A2A] hover:[text-shadow:0_0_14px_rgba(255,42,42,0.9),0_0_28px_rgba(230,30,30,0.65)] focus-visible:outline-none focus-visible:text-[#FF2A2A] focus-visible:[text-shadow:0_0_14px_rgba(255,42,42,0.9)] transition-all duration-300 cursor-pointer"
-      >
-        SKIP
-      </button>
-
-      {/* Full-Screen Horizontal Crimson Exit Divider Line */}
-      <div
-        ref={exitSweepLineRef}
-        aria-hidden="true"
-        className="absolute left-0 right-0 bottom-1/2 h-[1px] w-full origin-left scale-x-0 opacity-0 bg-gradient-to-r from-transparent via-[#FF2A2A] to-transparent shadow-[0_0_16px_rgba(255,42,42,0.65)] pointer-events-none"
-      />
     </div>
   );
 }

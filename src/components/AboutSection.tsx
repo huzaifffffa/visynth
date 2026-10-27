@@ -25,7 +25,9 @@ const STUDIO_PILLARS = [
   },
 ];
 
-export function AboutSection({ sectionRef }: AboutSectionProps) {
+export const AboutSection = React.memo(function AboutSection({
+  sectionRef,
+}: AboutSectionProps) {
   return (
     <section
       ref={sectionRef}
@@ -35,9 +37,9 @@ export function AboutSection({ sectionRef }: AboutSectionProps) {
     >
       <div
         data-about="container"
-        className="w-full max-w-[clamp(330px,44vw,660px)] flex flex-col items-start will-change-transform"
+        className="w-full max-w-[clamp(330px,44vw,660px)] flex flex-col items-start"
       >
-        <SectionEyebrow label="ABOUT VISYNTH" />
+        <SectionEyebrow label="03 / ABOUT VISYNTH" />
 
         <AnimatedHeading
           lines={[
@@ -54,11 +56,11 @@ export function AboutSection({ sectionRef }: AboutSectionProps) {
         />
 
         <div className="mt-[clamp(16px,2vw,30px)] space-y-3 max-w-[52ch] text-[clamp(10.5px,0.94vw,14.5px)] font-light leading-[1.7] tracking-[0.015em] text-[#c2c2c2]">
-          <p data-anim="about-copy" className="will-change-transform">
+          <p data-anim="about-copy">
             VISYNTH is a creative technology studio operating at the convergence
             of design, motion, engineering, and digital security.
           </p>
-          <p data-anim="about-copy" className="will-change-transform">
+          <p data-anim="about-copy">
             Instead of treating branding, 3D animation, web and app development,
             marketing, and cybersecurity as separate silos, we bring them
             together into a single coherent vision—so every experience we build
@@ -72,7 +74,7 @@ export function AboutSection({ sectionRef }: AboutSectionProps) {
             <div
               key={pillar.label}
               data-anim="about-pillar"
-              className="flex flex-col gap-1.5 will-change-transform"
+              className="flex flex-col gap-1.5"
             >
               <span className="text-[clamp(8.5px,0.68vw,10.5px)] font-semibold tracking-[0.22em] text-white uppercase">
                 {pillar.label}
@@ -87,7 +89,7 @@ export function AboutSection({ sectionRef }: AboutSectionProps) {
         {/* Studio Process Line */}
         <div
           data-anim="about-copy"
-          className="mt-[clamp(16px,2vw,28px)] pt-3 border-t border-white/[0.08] flex items-center gap-2 sm:gap-3 text-[9px] sm:text-[10px] font-mono tracking-[0.2em] uppercase text-white/50 will-change-transform flex-wrap"
+          className="mt-[clamp(16px,2vw,28px)] pt-3 border-t border-white/[0.08] flex items-center gap-2 sm:gap-3 text-[9px] sm:text-[10px] font-mono tracking-[0.2em] uppercase text-white/50 flex-wrap"
         >
           <span className="text-[#ff3b3b] font-semibold">PROCESS:</span>
           <span>DISCOVERY</span>
@@ -101,5 +103,4 @@ export function AboutSection({ sectionRef }: AboutSectionProps) {
       </div>
     </section>
   );
-}
-
+});

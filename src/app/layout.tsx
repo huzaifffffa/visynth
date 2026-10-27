@@ -96,6 +96,11 @@ export default function RootLayout({
         className="min-h-full bg-[#000000] text-white font-sans selection:bg-red-600/30 selection:text-white overflow-x-hidden"
       >
         <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(sessionStorage.getItem('visynth_seen_v4')==='true'){document.documentElement.classList.add('visynth-preloaded');}}catch(e){}`,
+          }}
+        />
+        <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }}
         />

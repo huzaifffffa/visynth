@@ -19,6 +19,15 @@ html {
   overscroll-behavior-y: none;
 }
 
+html:has([data-testid="site-preloader"]:not([data-exiting="true"])),
+body:has([data-testid="site-preloader"]:not([data-exiting="true"])) {
+  overflow: hidden !important;
+}
+
+html.visynth-preloaded [data-testid="site-preloader"] {
+  display: none !important;
+}
+
 body {
   background-color: #000000;
   color: #ffffff;
