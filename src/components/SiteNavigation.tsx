@@ -67,6 +67,7 @@ export function SiteNavigation({
       {/* Brand Logo (Left) — Preserved exactly */}
       <Link
         href={isExternalRoute ? "/" : "#home"}
+        prefetch={false}
         onClick={(e) => handleLinkClick(e, "home")}
         className="relative flex items-center shrink-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm"
         aria-label="VISYNTH Home"
@@ -76,7 +77,6 @@ export function SiteNavigation({
           alt="VISYNTH"
           width={936}
           height={130}
-          priority
           sizes="(max-width: 768px) 180px, 240px"
           className="w-[clamp(138px,15.6vw,240px)] h-auto object-contain"
         />
@@ -93,6 +93,7 @@ export function SiteNavigation({
             <Link
               key={item.id}
               href={getSectionHref(item.id)}
+              prefetch={false}
               onClick={(e) => handleLinkClick(e, item.id)}
               aria-current={isActive ? "page" : undefined}
               className={`relative py-2 px-1 text-[clamp(9.5px,0.72vw,11.5px)] font-medium tracking-[0.22em] uppercase transition-colors duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm ${
@@ -121,6 +122,7 @@ export function SiteNavigation({
       <div className="flex items-center gap-3">
         <Link
           href="/portfolio"
+          prefetch={false}
           aria-current={isPortfolioPage ? "page" : undefined}
           className={`relative inline-flex items-center justify-center py-2 px-1 text-[clamp(9.5px,0.72vw,11.5px)] font-medium tracking-[0.22em] uppercase transition-colors duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/80 rounded-sm ${
             isPortfolioPage
@@ -187,6 +189,7 @@ export function SiteNavigation({
               <Link
                 key={item.id}
                 href={getSectionHref(item.id)}
+                prefetch={false}
                 onClick={(e) => handleLinkClick(e, item.id)}
                 aria-current={isActive ? "page" : undefined}
                 className={`flex items-center gap-3 text-xs tracking-[0.24em] uppercase py-1.5 px-1 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm ${
@@ -207,6 +210,7 @@ export function SiteNavigation({
           })}
           <Link
             href="/portfolio"
+            prefetch={false}
             onClick={() => setMobileMenuOpen(false)}
             aria-current={isPortfolioPage ? "page" : undefined}
             className={`flex items-center gap-3 text-xs tracking-[0.24em] uppercase py-1.5 px-1 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm ${

@@ -17,6 +17,8 @@ const sharedFrameStates = new Uint8Array(TOTAL_SEQUENCE_FRAMES);
 
 let experienceReadyResolved = false;
 const experienceReadyCallbacks: (() => void)[] = [];
+let revealReadyResolved = false;
+const revealReadyCallbacks: (() => void)[] = [];
 let hasCompletedSessionPreload = false;
 
 export function getSharedFrames(): (HTMLImageElement | null)[] {
@@ -73,6 +75,29 @@ export function waitForExperienceReady(timeoutMs = 5000): Promise<void> {
       resolve();
     }, timeoutMs);
     experienceReadyCallbacks.push(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+export function notifyRevealReady(): void {
+  revealReadyResolved = true;
+  const cbs = revealReadyCallbacks.splice(0);
+  for (const cb of cbs) {
+    cb();
+  }
+}
+
+export function waitForRevealReady(timeoutMs = 500): Promise<void> {
+  if (revealReadyResolved) {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      resolve();
+    }, timeoutMs);
+    revealReadyCallbacks.push(() => {
       clearTimeout(timer);
       resolve();
     });
@@ -236,7 +261,7 @@ function buildInitialPreloadFrames(
   isSlowNetwork: boolean,
   isMobileViewport: boolean
 ): number[] {
-  if (prefersReducedMotion || isSlowNetwork) {
+  if (prefersReducedMotion || isSlowNetwork || isMobileViewport) {
     return [...REDUCED_MOTION_KEYFRAMES];
   }
 

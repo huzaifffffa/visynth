@@ -514,12 +514,14 @@ export function ContactSection({
           </a>
           <Link
             href="/privacy-policy"
+            prefetch={false}
             className="text-white/50 hover:text-white transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm"
           >
             PRIVACY POLICY
           </Link>
           <Link
             href="/copyright"
+            prefetch={false}
             className="text-white/50 hover:text-white transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm"
           >
             COPYRIGHT

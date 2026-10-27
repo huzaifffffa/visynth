@@ -19,11 +19,6 @@ html {
   overscroll-behavior-y: none;
 }
 
-html:has([data-testid="site-preloader"]),
-body:has([data-testid="site-preloader"]) {
-  overflow: hidden !important;
-}
-
 body {
   background-color: #000000;
   color: #ffffff;
@@ -69,19 +64,43 @@ body {
   );
 }
 
-@keyframes preloaderLogoIn {
-  0% {
-    opacity: 0.85;
-    transform: translate3d(0, 8px, 0);
-  }
-  100% {
+.preloader-logo-entrance {
+  opacity: 1;
+}
+
+@keyframes preloaderCursorBlink {
+  0%,
+  49% {
     opacity: 1;
-    transform: translate3d(0, 0, 0);
+  }
+  50%,
+  100% {
+    opacity: 0;
   }
 }
 
-.preloader-logo-entrance {
-  animation: preloaderLogoIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+@keyframes preloaderScanLine {
+  0% {
+    transform: translate3d(0, -10vh, 0);
+    opacity: 0.04;
+  }
+  100% {
+    transform: translate3d(0, 110vh, 0);
+    opacity: 0.12;
+  }
+}
+
+.preloader-cursor-blink {
+  animation: preloaderCursorBlink 0.52s steps(1, end) infinite;
+}
+
+.preloader-scan-line {
+  animation: preloaderScanLine 5.5s linear infinite;
+}
+
+[data-testid="site-preloader"]:not([data-exiting="true"]) + #visynth-app-content {
+  content-visibility: hidden;
+  contain-intrinsic-size: 100vw 100vh;
 }
 
 @media (prefers-reduced-motion: reduce) {

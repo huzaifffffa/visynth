@@ -7,6 +7,7 @@ import {
   hasSessionPreloadCompleted,
   markSessionPreloadCompleted,
   preloadSiteAssets,
+  waitForRevealReady,
 } from "@/lib/preloadSiteAssets";
 
 interface TypewriterSegment {
@@ -165,8 +166,6 @@ export function SitePreloader() {
 
     let isDisposed = false;
     const typewriter = createTypewriterController();
-    let cursorBlinkTween: gsap.core.Tween | null = null;
-    let scanLineTween: gsap.core.Tween | null = null;
 
     const prefersReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
@@ -230,32 +229,17 @@ export function SitePreloader() {
       }
     };
 
-    // 2. Start Controlled Asset & Sequence Frame Preloading (with 15s hard safety timeout)
+    // 2. Start Controlled Asset & Sequence Frame Preloading (deferred slightly after initial paint so LCP image has uncontested priority)
     let assetsReady = false;
     let storyCompleted = false;
     let exitStarted = false;
+    let assetController: { cancel: () => void } | null = null;
 
     const currentPathname =
       typeof window !== "undefined" ? window.location.pathname : "/";
 
-    const assetController = preloadSiteAssets({
-      pathname: currentPathname,
-      prefersReducedMotion,
-      safetyTimeoutMs: 15000,
-      onFirstFrameLoaded: (img) => {
-        if (isDisposed || !heroPreviewRef.current) return;
-        heroPreviewRef.current.style.backgroundImage = `url(${img.src})`;
-        heroPreviewRef.current.style.filter = "blur(18px)";
-        gsap.to(heroPreviewRef.current, {
-          opacity: 0.09,
-          duration: 1.1,
-          ease: "power2.out",
-        });
-      },
-    });
-
     // 3. Coordinated Exit Transition once BOTH Story and Assets are Ready (or when Skipped)
-    const triggerExitIfReady = (isManualSkip = false) => {
+    const triggerExitIfReady = async (isManualSkip = false) => {
       if (isDisposed || exitStarted) {
         return;
       }
@@ -263,16 +247,21 @@ export function SitePreloader() {
         return;
       }
       exitStarted = true;
+      root.setAttribute("data-exiting", "true");
+      window.dispatchEvent(new CustomEvent("visynth:preloader-exit-start"));
 
       if (isManualSkip) {
         typewriter.cancel();
       }
 
-      if (cursorBlinkTween) {
-        cursorBlinkTween.kill();
-      }
       if (cursorRef.current) {
+        cursorRef.current.classList.remove("preloader-cursor-blink");
         gsap.to(cursorRef.current, { opacity: 0, duration: 0.15 });
+      }
+
+      if (currentPathname === "/" || currentPathname === "") {
+        await waitForRevealReady(500);
+        if (isDisposed) return;
       }
 
       const exitTl = gsap.timeline({
@@ -337,37 +326,27 @@ export function SitePreloader() {
       triggerExitIfReady(true);
     };
 
-    assetController.promise.then(() => {
+    const preloadDelayTimer = window.setTimeout(() => {
       if (isDisposed) return;
-      assetsReady = true;
-      triggerExitIfReady();
-    });
-
-    // 4. Blinking Cursor & Subtle Moving Light Line
-    if (!prefersReducedMotion && cursorRef.current) {
-      cursorBlinkTween = gsap.to(cursorRef.current, {
-        opacity: 0,
-        duration: 0.26,
-        repeat: -1,
-        yoyo: true,
-        ease: "steps(1)",
-        repeatDelay: 0.24,
+      const ctrl = preloadSiteAssets({
+        pathname: currentPathname,
+        prefersReducedMotion,
+        safetyTimeoutMs: 15000,
+        onFirstFrameLoaded: (img) => {
+          if (isDisposed || !heroPreviewRef.current) return;
+          heroPreviewRef.current.style.backgroundImage = `url(${img.src})`;
+          heroPreviewRef.current.style.opacity = "0.09";
+        },
       });
-    }
+      assetController = ctrl;
+      ctrl.promise.then(() => {
+        if (isDisposed) return;
+        assetsReady = true;
+        triggerExitIfReady();
+      });
+    }, prefersReducedMotion ? 0 : 250);
 
-    if (!prefersReducedMotion && scanLineRef.current) {
-      scanLineTween = gsap.fromTo(
-        scanLineRef.current,
-        { yPercent: -10, opacity: 0.04 },
-        {
-          yPercent: 110,
-          opacity: 0.12,
-          duration: 5.5,
-          repeat: -1,
-          ease: "none",
-        }
-      );
-    }
+    // 4. Blinking Cursor & Subtle Moving Light Line run via pure compositor-thread CSS @keyframes
 
     // 5. Execute Story Sequence
     const runStorySequence = async () => {
@@ -405,8 +384,7 @@ export function SitePreloader() {
       // Reduced-Motion Fast Static Story Path (no character-by-character typing)
       if (prefersReducedMotion) {
         if (cursor) cursor.style.opacity = "0";
-        gsap.set(logoBlock, { opacity: 1, y: 0 });
-        gsap.set(chapterLine, { width: 90, opacity: 1 });
+        gsap.set(chapterLine, { scaleX: 1, opacity: 1 });
 
         typedText.textContent =
           "We turn imagination into identity, motion, experience, and technology.";
@@ -437,8 +415,8 @@ export function SitePreloader() {
           },
         ];
 
-        gsap.set(teamCard, { display: "flex", opacity: 1, x: 0, y: 0, scale: 1 });
-        gsap.set(teamSideBar, { display: "block", scaleY: 1, opacity: 1 });
+        gsap.set(teamCard, { opacity: 1, x: 0, y: 0, scale: 1 });
+        gsap.set(teamSideBar, { scaleY: 1, opacity: 1 });
         gsap.set(teamRole, { opacity: 1, y: 0 });
 
         for (const m of reducedMembers) {
@@ -451,9 +429,8 @@ export function SitePreloader() {
 
         gsap.set([narrativeBlock, teamCard, chapterLine], {
           opacity: 0,
-          display: "none",
         });
-        gsap.set(closingBlock, { display: "flex", opacity: 1 });
+        gsap.set(closingBlock, { opacity: 1 });
         closingPrimary.innerHTML = `Different minds. <span class="text-[#FF2A2A]">ONE VISION.</span>`;
         gsap.set(closingSubline, { opacity: 1, y: 0 });
         await typewriter.wait(450);
@@ -468,7 +445,6 @@ export function SitePreloader() {
       // SCENE 1 — Opening (~1.2s)
       // "Every vision begins as a signal."
       // =====================================================================
-      gsap.set(logoBlock, { opacity: 1, y: 0 });
       await typewriter.wait(160);
       if (isDisposed) return;
 
@@ -496,8 +472,8 @@ export function SitePreloader() {
       gsap.set(narrativeBlock, { opacity: 1, y: 0 });
       gsap.fromTo(
         chapterLine,
-        { width: 0, opacity: 0.9 },
-        { width: 90, opacity: 1, duration: 0.65, ease: "power2.out" }
+        { scaleX: 0, opacity: 0.9 },
+        { scaleX: 1, opacity: 1, duration: 0.65, ease: "power2.out" }
       );
 
       await typewriter.typeIntoElement(
@@ -612,18 +588,16 @@ export function SitePreloader() {
       typedText.textContent = "";
       gsap.set(narrativeBlock, { opacity: 1 });
       gsap.set(teamCard, {
-        display: "flex",
         opacity: 1,
         x: -20,
         y: 0,
         scale: 1,
       });
       gsap.set(teamSideBar, {
-        display: "block",
         scaleY: 0,
         opacity: 1,
       });
-      gsap.set(teamTopLine, { display: "none", width: 0 });
+      gsap.set(teamTopLine, { scaleX: 0, opacity: 0 });
       teamName.textContent = "";
       teamRole.textContent = "CHIEF HEAD";
       gsap.set(teamRole, { opacity: 0, y: 6 });
@@ -708,11 +682,11 @@ export function SitePreloader() {
       teamRole.textContent = "MARKETING HEAD";
       gsap.set(narrativeBlock, { opacity: 1 });
       gsap.set(teamCard, { opacity: 1, x: 0, y: 0, scale: 1 });
-      gsap.set(teamTopLine, { display: "block", width: 0, opacity: 1 });
+      gsap.set(teamTopLine, { scaleX: 0, opacity: 1 });
       gsap.set(teamRole, { opacity: 0, y: 6 });
 
       gsap.to(teamTopLine, {
-        width: 72,
+        scaleX: 1,
         duration: 0.45,
         ease: "power2.out",
       });
@@ -747,7 +721,7 @@ export function SitePreloader() {
       typedText.textContent = "";
       teamName.textContent = "";
       teamRole.textContent = "SALES HEAD";
-      gsap.set(teamTopLine, { display: "none" });
+      gsap.set(teamTopLine, { scaleX: 0, opacity: 0 });
       gsap.set(narrativeBlock, { opacity: 1 });
       gsap.set(teamCard, { opacity: 0, x: 0, y: 0, scale: 0.98 });
       gsap.set(teamRole, { opacity: 0, y: 6 });
@@ -788,8 +762,7 @@ export function SitePreloader() {
       });
       if (isDisposed) return;
 
-      gsap.set([narrativeBlock, teamCard], { display: "none" });
-      gsap.set(closingBlock, { display: "flex", opacity: 1 });
+      gsap.set(closingBlock, { opacity: 1 });
       gsap.set(closingSubline, { opacity: 0, y: 10 });
 
       await typewriter.typeSegments(
@@ -807,10 +780,8 @@ export function SitePreloader() {
       );
 
       // Stop cursor blinking after the final line is typed
-      if (cursorBlinkTween) {
-        cursorBlinkTween.kill();
-      }
       if (cursor) {
+        cursor.classList.remove("preloader-cursor-blink");
         cursor.style.opacity = "0";
       }
 
@@ -831,10 +802,9 @@ export function SitePreloader() {
 
     return () => {
       isDisposed = true;
+      window.clearTimeout(preloadDelayTimer);
       typewriter.cancel();
-      assetController.cancel();
-      if (cursorBlinkTween) cursorBlinkTween.kill();
-      if (scanLineTween) scanLineTween.kill();
+      assetController?.cancel();
       unlockInteractionAndScroll();
     };
   }, []);
@@ -863,10 +833,10 @@ export function SitePreloader() {
         aria-hidden="true"
         className="absolute inset-0 w-full h-full pointer-events-none will-change-transform"
       >
-        {/* Low-opacity blurred preview of Frame 1 once decoded */}
+        {/* Low-opacity preview of Frame 1 once decoded */}
         <div
           ref={heroPreviewRef}
-          className="absolute inset-0 w-full h-full bg-cover bg-center opacity-0 scale-105 transition-opacity"
+          className="absolute inset-0 w-full h-full bg-cover bg-center opacity-0 scale-105 transition-opacity duration-1000 ease-out"
         />
 
         {/* Deep Dark Vignette + Subtle Lower-Right / Center-Right Crimson Atmospheric Glow */}
@@ -881,7 +851,7 @@ export function SitePreloader() {
         {/* Faint Moving Horizontal Scan Line */}
         <div
           ref={scanLineRef}
-          className="absolute inset-x-0 top-0 h-[1px] w-full bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-5"
+          className="preloader-scan-line absolute inset-x-0 top-0 h-[1px] w-full bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-5"
         />
 
         {/* Top & Bottom Fine Architectural Framing Lines */}
@@ -898,7 +868,7 @@ export function SitePreloader() {
         {/* Brand Header Block: Logo + Studio Label */}
         <div
           ref={logoBlockRef}
-          className="preloader-logo-entrance flex flex-col items-start gap-2.5 mb-7 will-change-transform"
+          className="preloader-logo-entrance flex flex-col items-start gap-2.5 mb-7"
         >
           <div className="flex items-center gap-3">
             <span className="w-1.5 h-1.5 rounded-full bg-[#E61E1E] shadow-[0_0_10px_rgba(255,42,42,0.75)]" />
@@ -913,49 +883,48 @@ export function SitePreloader() {
             width={936}
             height={130}
             priority
+            fetchPriority="high"
             sizes="(max-width: 768px) 180px, 240px"
             className="w-[168px] md:w-[212px] h-auto object-contain drop-shadow-[0_0_18px_rgba(255,42,42,0.28)]"
           />
         </div>
 
-        {/* Thin Crimson Chapter Line (Grows 0px -> 90px in Scene 2) */}
+        {/* Thin Crimson Chapter Line (Scales 0 -> 1 in Scene 2 without layout reflow) */}
         <div
           ref={chapterLineRef}
-          className="h-[1px] w-0 bg-gradient-to-r from-[#FF2A2A] via-[#E61E1E] to-transparent shadow-[0_0_12px_rgba(255,42,42,0.35)] mb-6"
+          className="h-[1px] w-[90px] origin-left scale-x-0 bg-gradient-to-r from-[#FF2A2A] via-[#E61E1E] to-transparent shadow-[0_0_12px_rgba(255,42,42,0.35)] mb-6"
         />
 
         {/* Narrative Typewriter Block (Mobile: calc(100vw - 48px) 18-24px, Desktop: max-w-[620px]) */}
         <div
           ref={narrativeBlockRef}
-          className="w-[calc(100vw-48px)] md:w-full md:max-w-[620px] min-h-[68px] md:min-h-[76px] flex items-start"
+          className="w-[calc(100vw-48px)] md:w-full md:max-w-[620px] min-h-[104px] md:min-h-[76px] flex items-start"
         >
           <p className="text-[clamp(18px,4.5vw,24px)] md:text-[clamp(20px,2vw,24px)] font-light leading-[1.48] tracking-[0.02em] text-[#F5F5F5]">
             <span ref={typedTextRef} data-testid="preloader-typed-text" />
             <span
               ref={cursorRef}
-              className="inline-block w-[2px] h-[1.08em] bg-[#FF2A2A] align-middle ml-1.5 shadow-[0_0_8px_rgba(255,42,42,0.6)]"
+              className="preloader-cursor-blink inline-block w-[2px] h-[1.08em] bg-[#FF2A2A] align-middle ml-1.5 shadow-[0_0_8px_rgba(255,42,42,0.6)]"
             />
           </p>
         </div>
 
-        {/* Team Member Feature Card (Scenes 5–8) */}
+        {/* Team Member Feature Card (Scenes 5–8; reserved height prevents layout shift) */}
         <div
           ref={teamCardRef}
-          style={{ display: "none" }}
-          className="mt-6 flex items-stretch gap-4 will-change-transform"
+          className="mt-6 min-h-[68px] flex items-stretch gap-4 opacity-0 pointer-events-none will-change-transform"
         >
           {/* Vertical Crimson Accent Line Beside Name */}
           <div
             ref={teamSideBarRef}
-            className="w-[2px] bg-[#E61E1E] origin-top shadow-[0_0_12px_rgba(255,42,42,0.45)]"
+            className="w-[2px] bg-[#E61E1E] origin-top scale-y-0 shadow-[0_0_12px_rgba(255,42,42,0.45)]"
           />
 
           <div className="flex flex-col justify-center py-0.5">
             {/* Optional Left-to-Right Top Line (Scene 7) */}
             <div
               ref={teamTopLineRef}
-              style={{ display: "none" }}
-              className="h-[1px] w-0 bg-[#FF2A2A] mb-2 shadow-[0_0_8px_rgba(255,42,42,0.4)]"
+              className="h-[1px] w-[72px] origin-left scale-x-0 opacity-0 bg-[#FF2A2A] mb-2 shadow-[0_0_8px_rgba(255,42,42,0.4)]"
             />
 
             <div
@@ -966,16 +935,15 @@ export function SitePreloader() {
             <div
               ref={teamRoleRef}
               data-testid="preloader-team-role"
-              className="mt-1.5 text-[11px] sm:text-xs font-mono tracking-[0.28em] uppercase text-[#FF2A2A] drop-shadow-[0_0_10px_rgba(255,42,42,0.35)]"
+              className="mt-1.5 text-[11px] sm:text-xs font-mono tracking-[0.28em] uppercase text-[#FF2A2A] drop-shadow-[0_0_10px_rgba(255,42,42,0.35)] min-h-[1.2em]"
             />
           </div>
         </div>
 
-        {/* Scene 9 — Centered Closing Statement */}
+        {/* Scene 9 — Centered Closing Statement (Overlayed inside stageWrapper so height never shifts) */}
         <div
           ref={closingBlockRef}
-          style={{ display: "none" }}
-          className="w-[calc(100vw-48px)] md:w-full md:max-w-[620px] flex-col items-center text-center self-center py-4"
+          className="absolute inset-x-0 top-1/2 -translate-y-1/2 w-[calc(100vw-48px)] md:w-full md:max-w-[620px] flex flex-col items-center text-center self-center py-4 opacity-0 pointer-events-none"
         >
           <div
             ref={closingPrimaryRef}
@@ -996,6 +964,12 @@ export function SitePreloader() {
       {/* Bottom-Right Skip Button */}
       <button
         type="button"
+        onMouseEnter={() =>
+          window.dispatchEvent(new CustomEvent("visynth:preload-experience"))
+        }
+        onFocus={() =>
+          window.dispatchEvent(new CustomEvent("visynth:preload-experience"))
+        }
         onClick={() => skipHandlerRef.current?.()}
         data-testid="preloader-skip-button"
         aria-label="Skip intro"
