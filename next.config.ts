@@ -21,6 +21,10 @@ const nextConfig: NextConfig = {
         headers: [IMMUTABLE_CACHE_HEADER],
       },
       {
+        source: "/frames-mobile/:path*",
+        headers: [IMMUTABLE_CACHE_HEADER],
+      },
+      {
         source: "/portfolio/:path*",
         headers: [IMMUTABLE_CACHE_HEADER],
       },

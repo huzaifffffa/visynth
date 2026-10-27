@@ -35,12 +35,21 @@ export function markSessionPreloadCompleted(): void {
   hasCompletedSessionPreload = true;
 }
 
+// Lock the frame variant (desktop vs mobile) once per session so shared cache keys match
+let cachedFrameFolder: "/frames" | "/frames-mobile" | null = null;
+
 export function getFrameUrl(indexZeroBased: number): string {
   const clamped = Math.min(
     TOTAL_SEQUENCE_FRAMES,
     Math.max(1, indexZeroBased + 1)
   );
-  return `/frames/frame_${String(clamped).padStart(3, "0")}.webp`;
+  if (!cachedFrameFolder) {
+    cachedFrameFolder =
+      typeof window !== "undefined" && window.innerWidth <= 768
+        ? "/frames-mobile"
+        : "/frames";
+  }
+  return `${cachedFrameFolder}/frame_${String(clamped).padStart(3, "0")}.webp`;
 }
 
 /**

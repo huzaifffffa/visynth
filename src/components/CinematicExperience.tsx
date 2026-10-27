@@ -5,6 +5,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
 import {
+  getFrameUrl,
   getSharedFrames,
   getSharedFrameStates,
   hasSessionPreloadCompleted,
@@ -32,10 +33,7 @@ const FRAME_FAILED = 3;
 const REDUCED_MOTION_KEYFRAMES = [0, 93, 171, 240, 295];
 
 function getFrameSrc(indexZeroBased: number): string {
-  const num = String(
-    Math.min(TOTAL_FRAMES, Math.max(1, indexZeroBased + 1))
-  ).padStart(3, "0");
-  return `/frames/frame_${num}.webp`;
+  return getFrameUrl(indexZeroBased);
 }
 
 // Target normalized scroll progress anchors (0..1) for direct section navigation
