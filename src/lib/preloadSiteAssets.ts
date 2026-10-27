@@ -1,7 +1,5 @@
 "use client";
 
-import { PORTFOLIO_ITEMS } from "@/data/portfolioItems";
-
 export const TOTAL_SEQUENCE_FRAMES = 300;
 
 export const FRAME_UNLOADED = 0;
@@ -57,7 +55,7 @@ export function notifyExperienceReady(): void {
   }
 }
 
-export function waitForExperienceReady(timeoutMs = 6000): Promise<void> {
+export function waitForExperienceReady(timeoutMs = 5000): Promise<void> {
   if (experienceReadyResolved) {
     return Promise.resolve();
   }
@@ -72,28 +70,47 @@ export function waitForExperienceReady(timeoutMs = 6000): Promise<void> {
   });
 }
 
-function getOptimalConcurrency(): number {
-  if (typeof window === "undefined") return 6;
+function isConstrainedConnectionOrMobile(): {
+  isSlowNetwork: boolean;
+  isMobileViewport: boolean;
+  concurrency: number;
+} {
+  if (typeof window === "undefined") {
+    return { isSlowNetwork: false, isMobileViewport: false, concurrency: 3 };
+  }
   const nav = window.navigator as Navigator & {
     deviceMemory?: number;
-    connection?: { saveData?: boolean; effectiveType?: string };
+    connection?: {
+      saveData?: boolean;
+      effectiveType?: string;
+      downlink?: number;
+    };
   };
   const cores = nav.hardwareConcurrency || 4;
   const memory = nav.deviceMemory || 4;
-  const effectiveType = nav.connection?.effectiveType;
+  const conn = nav.connection;
+  const effectiveType = conn?.effectiveType;
+  const downlink = conn?.downlink ?? 10;
+
   const isSlowNetwork =
-    Boolean(nav.connection?.saveData) ||
+    Boolean(conn?.saveData) ||
     effectiveType === "slow-2g" ||
     effectiveType === "2g" ||
-    effectiveType === "3g";
+    effectiveType === "3g" ||
+    downlink < 2.5;
 
-  if (isSlowNetwork || cores <= 2 || memory <= 2) {
-    return 4;
-  }
-  if (cores >= 8 && memory >= 8) {
-    return 8;
-  }
-  return 6;
+  const isMobileViewport =
+    window.innerWidth < 768 ||
+    window.matchMedia("(pointer: coarse)").matches;
+
+  const concurrency =
+    isSlowNetwork || cores <= 2 || memory <= 2
+      ? 2
+      : isMobileViewport
+      ? 2
+      : 3;
+
+  return { isSlowNetwork, isMobileViewport, concurrency };
 }
 
 /**
@@ -176,12 +193,13 @@ export async function loadSequenceFrame(
 }
 
 /**
- * Fill any failed or unloaded frame slots with the nearest loaded fallback frame
- * so the canvas never encounters a missing image.
+ * Fill any failed frame slots with the nearest loaded fallback frame
+ * so the canvas never encounters a broken image, while leaving FRAME_UNLOADED
+ * slots untouched so CinematicExperience's progressive loader can load them.
  */
 export function assignFallbackFrames(): void {
   for (let i = 0; i < TOTAL_SEQUENCE_FRAMES; i++) {
-    if (sharedImages[i]) continue;
+    if (sharedFrameStates[i] !== FRAME_FAILED || sharedImages[i]) continue;
     for (let offset = 1; offset < TOTAL_SEQUENCE_FRAMES; offset++) {
       const prev = i - offset;
       if (prev >= 0 && sharedImages[prev]) {
@@ -200,13 +218,16 @@ export function assignFallbackFrames(): void {
 }
 
 /**
- * Build a progressive priority order for all 300 frames:
- * 1. Frame 0 (hero frame)
- * 2. Section anchor keyframes
- * 3. Stride 8 -> Stride 4 -> Stride 2 -> Stride 1
+ * Build a selective initial priority list for the preloader on `/` so initial page weight
+ * stays lean on desktop, mobile, Slow 4G, and 3G while guaranteeing immediate hero & keyframe readiness.
+ * Remaining frames are loaded progressively by CinematicExperience around the user's scroll position.
  */
-function buildFrameLoadOrder(prefersReducedMotion: boolean): number[] {
-  if (prefersReducedMotion) {
+function buildInitialPreloadFrames(
+  prefersReducedMotion: boolean,
+  isSlowNetwork: boolean,
+  isMobileViewport: boolean
+): number[] {
+  if (prefersReducedMotion || isSlowNetwork) {
     return [...REDUCED_MOTION_KEYFRAMES];
   }
 
@@ -220,16 +241,14 @@ function buildFrameLoadOrder(prefersReducedMotion: boolean): number[] {
     }
   };
 
-  // Immediate opening frames & key anchors
+  // Frame 0 + Section anchor keyframes
   push(0);
   for (const kf of REDUCED_MOTION_KEYFRAMES) push(kf);
-  for (let i = 0; i < 16; i++) push(i);
 
-  // Progressive multi-resolution passes
-  for (const stride of [8, 4, 2, 1]) {
-    for (let i = 0; i < TOTAL_SEQUENCE_FRAMES; i += stride) {
-      push(i);
-    }
+  // Opening hero scrub frames (lightweight set for mobile vs desktop)
+  const openingCount = isMobileViewport ? 6 : 14;
+  for (let i = 1; i <= openingCount; i++) {
+    push(i);
   }
 
   return order;
@@ -251,11 +270,8 @@ export interface PreloadResult {
 /**
  * Controlled readiness orchestrator that waits for:
  * 1. Critical fonts (document.fonts.ready)
- * 2. Brand logo & wordmark (/visynth-logo.png, /visynth-wordmark.png)
- * 3. Hero frame (/frames/frame_001.webp)
- * 4. Controlled queue of required sequence frames (or portfolio assets)
- * 5. GSAP / ScrollTrigger / Canvas initial layout & render readiness
- * 6. Window load state as additional readiness signal
+ * 2. On `/` only: Hero frame (/frames/frame_001.webp) + selective opening/anchor frames + Canvas/GSAP readiness
+ * 3. Window load state as additional readiness signal
  * With a hard safety timeout (default 15,000ms) so the site never hangs.
  */
 export function preloadSiteAssets(
@@ -266,6 +282,12 @@ export function preloadSiteAssets(
 
   const cancel = () => {
     isCancelled = true;
+    // Reset any in-flight loading state back to unloaded so CinematicExperience can pick them up cleanly
+    for (let i = 0; i < TOTAL_SEQUENCE_FRAMES; i++) {
+      if (sharedFrameStates[i] === FRAME_LOADING && !sharedImages[i]) {
+        sharedFrameStates[i] = FRAME_UNLOADED;
+      }
+    }
   };
 
   const promise = new Promise<PreloadResult>((resolve) => {
@@ -284,12 +306,14 @@ export function preloadSiteAssets(
       });
     };
 
-    // Hard safety timeout (15s default) ensures the website can never remain permanently locked
     const safetyTimer = setTimeout(() => {
       finalize(true);
     }, safetyTimeoutMs);
 
     const runAllChecks = async () => {
+      const isHomeRoute =
+        options.pathname === "/" || options.pathname === "";
+
       // 1. Critical Font Readiness
       const fontsPromise =
         typeof document !== "undefined" &&
@@ -297,83 +321,11 @@ export function preloadSiteAssets(
         document.fonts.ready
           ? Promise.race([
               document.fonts.ready.catch(() => undefined),
-              new Promise((r) => setTimeout(r, 3000)),
+              new Promise((r) => setTimeout(r, 2500)),
             ])
           : Promise.resolve();
 
-      // 2. Critical Brand Assets (Logo & Wordmark)
-      const brandAssetsPromise = Promise.allSettled([
-        loadAndDecodeImage("/visynth-logo.png", true, 1),
-        loadAndDecodeImage("/visynth-wordmark.png", true, 1),
-      ]);
-
-      // 3. First Hero Frame (Immediate High Priority)
-      const firstFramePromise = loadSequenceFrame(0, true).then((img) => {
-        if (img) {
-          loadedFramesCount++;
-          if (!isCancelled && options.onFirstFrameLoaded) {
-            options.onFirstFrameLoaded(img);
-          }
-        } else {
-          failedFramesCount++;
-        }
-        return img;
-      });
-
-      // Wait for initial critical assets first so network bandwidth isn't contended
-      await Promise.allSettled([
-        fontsPromise,
-        brandAssetsPromise,
-        firstFramePromise,
-      ]);
-
-      if (isCancelled || resolved) {
-        clearTimeout(safetyTimer);
-        return;
-      }
-
-      // 4. Portfolio Critical Assets (if on /portfolio, preload all portfolio cards; otherwise preload primary featured cards)
-      const isPortfolioRoute = options.pathname.startsWith("/portfolio");
-      const portfolioTargets = isPortfolioRoute
-        ? PORTFOLIO_ITEMS.map((item) => item.imageSrc)
-        : PORTFOLIO_ITEMS.slice(0, 3).map((item) => item.imageSrc);
-
-      const portfolioPromise = Promise.allSettled(
-        portfolioTargets.map((src) => loadAndDecodeImage(src, isPortfolioRoute, 1))
-      );
-
-      // 5. Controlled Concurrency Queue for Background Frame Sequence
-      const frameOrder = buildFrameLoadOrder(options.prefersReducedMotion);
-      const concurrency = getOptimalConcurrency();
-      let cursor = 0;
-
-      const runFrameWorker = async (): Promise<void> => {
-        while (!isCancelled && !resolved && cursor < frameOrder.length) {
-          const frameIdx = frameOrder[cursor++];
-          if (
-            sharedFrameStates[frameIdx] === FRAME_LOADED &&
-            sharedImages[frameIdx]
-          ) {
-            continue;
-          }
-          const img = await loadSequenceFrame(frameIdx, false);
-          if (img) {
-            loadedFramesCount++;
-          } else {
-            failedFramesCount++;
-          }
-        }
-      };
-
-      const workers: Promise<void>[] = [];
-      const workerCount = Math.min(concurrency, frameOrder.length);
-      for (let w = 0; w < workerCount; w++) {
-        workers.push(runFrameWorker());
-      }
-
-      const framesQueuePromise = Promise.allSettled(workers);
-
-      // 6. Window load signal (non-blocking fallback if already complete)
+      // 2. Window load signal (non-blocking fallback if already complete)
       const windowLoadPromise =
         typeof document !== "undefined" && document.readyState === "complete"
           ? Promise.resolve()
@@ -390,18 +342,83 @@ export function preloadSiteAssets(
               setTimeout(() => {
                 window.removeEventListener("load", onLoad);
                 res();
-              }, 3500);
+              }, 2500);
             });
 
-      // 7. Experience / Layout Readiness (GSAP, ScrollTrigger, Canvas initial frame on /)
-      const isHomeRoute =
-        options.pathname === "/" || options.pathname === "";
-      const experiencePromise = isHomeRoute
-        ? waitForExperienceReady(5000)
-        : Promise.resolve();
+      // On subpages (/portfolio, /privacy-policy, /copyright), do NOT download the 300-frame home canvas sequence
+      if (!isHomeRoute) {
+        await Promise.allSettled([fontsPromise, windowLoadPromise]);
+        clearTimeout(safetyTimer);
+        if (!isCancelled) {
+          finalize(false);
+        }
+        return;
+      }
+
+      const { isSlowNetwork, isMobileViewport, concurrency } =
+        isConstrainedConnectionOrMobile();
+
+      // 3. First Hero Frame on Home Route
+      const firstFramePromise = loadSequenceFrame(0, !isSlowNetwork).then(
+        (img) => {
+          if (img) {
+            loadedFramesCount++;
+            if (!isCancelled && options.onFirstFrameLoaded) {
+              options.onFirstFrameLoaded(img);
+            }
+          } else {
+            failedFramesCount++;
+          }
+          return img;
+        }
+      );
+
+      await Promise.allSettled([fontsPromise, firstFramePromise]);
+
+      if (isCancelled || resolved) {
+        clearTimeout(safetyTimer);
+        return;
+      }
+
+      // 4. Controlled Concurrency Queue for Selective Initial Frames (yields between decodes to avoid main-thread long tasks)
+      const frameOrder = buildInitialPreloadFrames(
+        options.prefersReducedMotion,
+        isSlowNetwork,
+        isMobileViewport
+      );
+      let cursor = 0;
+
+      const runFrameWorker = async (): Promise<void> => {
+        while (!isCancelled && !resolved && cursor < frameOrder.length) {
+          const frameIdx = frameOrder[cursor++];
+          if (
+            sharedFrameStates[frameIdx] === FRAME_LOADED &&
+            sharedImages[frameIdx]
+          ) {
+            continue;
+          }
+          // Yield briefly between decodes so main-thread tasks stay well under 50ms
+          await new Promise((r) => setTimeout(r, 12));
+          if (isCancelled || resolved) break;
+          const img = await loadSequenceFrame(frameIdx, false);
+          if (img) {
+            loadedFramesCount++;
+          } else {
+            failedFramesCount++;
+          }
+        }
+      };
+
+      const workers: Promise<void>[] = [];
+      const workerCount = Math.min(concurrency, frameOrder.length);
+      for (let w = 0; w < workerCount; w++) {
+        workers.push(runFrameWorker());
+      }
+
+      const framesQueuePromise = Promise.allSettled(workers);
+      const experiencePromise = waitForExperienceReady(4000);
 
       await Promise.allSettled([
-        portfolioPromise,
         framesQueuePromise,
         windowLoadPromise,
         experiencePromise,
@@ -421,4 +438,3 @@ export function preloadSiteAssets(
 
   return { promise, cancel };
 }
-

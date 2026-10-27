@@ -77,6 +77,7 @@ export function SiteNavigation({
           width={936}
           height={130}
           priority
+          sizes="(max-width: 768px) 180px, 240px"
           className="w-[clamp(138px,15.6vw,240px)] h-auto object-contain"
         />
       </Link>
@@ -170,9 +171,9 @@ export function SiteNavigation({
         id="mobile-navigation-drawer"
         data-drag-ignore="true"
         aria-hidden={!mobileMenuOpen}
-        className={`md:hidden fixed inset-x-0 top-[clamp(64px,5.6vw,90px)] bg-black/95 border-b border-white/10 backdrop-blur-md transition-all duration-300 overflow-hidden ${
+        className={`md:hidden fixed inset-x-0 top-[clamp(64px,5.6vw,90px)] bg-black/95 border-b border-white/10 transition-all duration-300 overflow-hidden ${
           mobileMenuOpen
-            ? "max-h-96 opacity-100 py-6 pointer-events-auto"
+            ? "max-h-96 opacity-100 py-6 pointer-events-auto backdrop-blur-md"
             : "max-h-0 opacity-0 py-0 pointer-events-none"
         }`}
       >

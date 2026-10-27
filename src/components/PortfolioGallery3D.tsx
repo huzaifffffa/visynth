@@ -783,8 +783,8 @@ export function PortfolioGallery3D() {
                           alt={item.imageAlt}
                           width={item.width}
                           height={item.height}
-                          priority={absOffset <= 2}
-                          loading={absOffset <= 2 ? "eager" : "lazy"}
+                          priority={isActive}
+                          loading={isVisible ? "eager" : "lazy"}
                           draggable={false}
                           sizes="(max-width: 768px) 76vw, (max-width: 1200px) 34vw, 380px"
                           className={`w-full h-full object-cover select-none transition-transform duration-700 ease-out ${
@@ -865,7 +865,7 @@ export function PortfolioGallery3D() {
                             height={item.height}
                             loading="lazy"
                             draggable={false}
-                            sizes="260px"
+                            sizes="(max-width: 768px) 76vw, (max-width: 1200px) 34vw, 380px"
                             className="w-full h-auto object-cover -scale-y-100 blur-[1.5px] brightness-75"
                           />
                         </div>

@@ -245,8 +245,9 @@ export function SitePreloader() {
       onFirstFrameLoaded: (img) => {
         if (isDisposed || !heroPreviewRef.current) return;
         heroPreviewRef.current.style.backgroundImage = `url(${img.src})`;
+        heroPreviewRef.current.style.filter = "blur(18px)";
         gsap.to(heroPreviewRef.current, {
-          opacity: 0.16,
+          opacity: 0.09,
           duration: 1.1,
           ease: "power2.out",
         });
@@ -467,11 +468,7 @@ export function SitePreloader() {
       // SCENE 1 — Opening (~1.2s)
       // "Every vision begins as a signal."
       // =====================================================================
-      gsap.fromTo(
-        logoBlock,
-        { opacity: 0, y: 12 },
-        { opacity: 1, y: 0, duration: 0.55, ease: "power2.out" }
-      );
+      gsap.set(logoBlock, { opacity: 1, y: 0 });
       await typewriter.wait(160);
       if (isDisposed) return;
 
@@ -869,7 +866,7 @@ export function SitePreloader() {
         {/* Low-opacity blurred preview of Frame 1 once decoded */}
         <div
           ref={heroPreviewRef}
-          className="absolute inset-0 w-full h-full bg-cover bg-center opacity-0 blur-[18px] scale-105 transition-opacity"
+          className="absolute inset-0 w-full h-full bg-cover bg-center opacity-0 scale-105 transition-opacity"
         />
 
         {/* Deep Dark Vignette + Subtle Lower-Right / Center-Right Crimson Atmospheric Glow */}
@@ -901,7 +898,7 @@ export function SitePreloader() {
         {/* Brand Header Block: Logo + Studio Label */}
         <div
           ref={logoBlockRef}
-          className="flex flex-col items-start gap-2.5 mb-7 opacity-0 will-change-transform"
+          className="preloader-logo-entrance flex flex-col items-start gap-2.5 mb-7 will-change-transform"
         >
           <div className="flex items-center gap-3">
             <span className="w-1.5 h-1.5 rounded-full bg-[#E61E1E] shadow-[0_0_10px_rgba(255,42,42,0.75)]" />
@@ -916,6 +913,7 @@ export function SitePreloader() {
             width={936}
             height={130}
             priority
+            sizes="(max-width: 768px) 180px, 240px"
             className="w-[168px] md:w-[212px] h-auto object-contain drop-shadow-[0_0_18px_rgba(255,42,42,0.28)]"
           />
         </div>

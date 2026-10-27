@@ -377,7 +377,9 @@ export function CinematicExperience() {
     const tickerCallback = (time: number) => {
       lenis.raf(time * 1000);
     };
-    gsap.ticker.add(tickerCallback);
+    if (hasSessionPreloadCompleted()) {
+      gsap.ticker.add(tickerCallback);
+    }
     gsap.ticker.lagSmoothing(0);
 
     const canvas = canvasRef.current;
@@ -643,8 +645,9 @@ export function CinematicExperience() {
     };
 
     const spawnWorker = () => {
+      if (isCancelled || !hasSessionPreloadCompleted()) return;
       const limit = getEffectiveConcurrency();
-      if (isCancelled || activeWorkers >= limit) return;
+      if (activeWorkers >= limit) return;
       const nextIndex = pickNextFrameToLoad();
       if (nextIndex === -1) return;
 
@@ -652,13 +655,13 @@ export function CinematicExperience() {
       loadSingleFrame(nextIndex, nextIndex === 0).then(() => {
         activeWorkers--;
         if (!isCancelled) {
-          spawnWorker();
+          setTimeout(spawnWorker, capabilities.isSlowDevice ? 24 : 8);
         }
       });
     };
 
     const wakeLoadWorkers = () => {
-      if (isCancelled) return;
+      if (isCancelled || !hasSessionPreloadCompleted()) return;
       const limit = getEffectiveConcurrency();
       while (activeWorkers < limit) {
         const before = activeWorkers;
@@ -680,89 +683,111 @@ export function CinematicExperience() {
     wakeLoadersRef.current = wakeLoadWorkers;
 
     // 1. Load Frame 0 immediately with high priority so the canvas never starts blank,
-    //    then spin up the controlled background worker pool (3–4 concurrent requests).
+    //    then spin up the controlled background worker pool once preloader completes.
     if (frameStates[0] === FRAME_LOADED && imagesRef.current[0]) {
       scheduleFrameDraw(targetFrameRef.current, true);
       notifyExperienceReady();
-      wakeLoadWorkers();
+      if (hasSessionPreloadCompleted()) {
+        wakeLoadWorkers();
+      }
     } else {
       loadSingleFrame(0, true).then(() => {
         if (!isCancelled) {
           scheduleFrameDraw(targetFrameRef.current, true);
           notifyExperienceReady();
-          wakeLoadWorkers();
+          if (hasSessionPreloadCompleted()) {
+            wakeLoadWorkers();
+          }
         }
       });
     }
 
+    // Handle initial URL hash and in-page hashchange
+    const handleHashNavigation = (instant = true) => {
+      const hash = window.location.hash.replace("#", "") as SectionId;
+      if (hash && hash !== "home" && hash in SECTION_SCROLL_ANCHORS) {
+        ScrollTrigger.refresh();
+        scrollToSection(hash, instant);
+      } else if (hash === "home" || window.scrollY > 0) {
+        scrollToSection("home", instant);
+      }
+    };
+
     // =========================================================================
     // Master GSAP ScrollTrigger Timeline (t = 0 -> 100)
+    // Micro-sliced across two short macro-tasks so initial hydration never causes a >50ms Long Task on mobile CPUs
     // =========================================================================
-    const ctx = gsap.context(() => {
-      const tl = gsap.timeline({
-        defaults: { ease: "none" },
-      });
+    const ctx = gsap.context(() => {}, wrapper);
+    let slice2Timer: number | null = null;
 
-      masterTimelineRef.current = tl;
+    const slice1Delay = hasSessionPreloadCompleted() ? 16 : 180;
+    const slice1Timer = window.setTimeout(() => {
+      if (isCancelled) return;
+      ctx.add(() => {
+        const tl = gsap.timeline({
+          defaults: { ease: "none" },
+        });
 
-      const st = ScrollTrigger.create({
-        trigger: wrapper,
-        start: "top top",
-        end: () => `+=${Math.round(window.innerHeight * 8.0)}`,
-        pin: true,
-        // With Lenis smoothly interpolating wheel and touch inputs, scrub: true
-        // locks the timeline and canvas 1:1 to the smooth scroll position without lag
-        scrub: true,
-        fastScrollEnd: true,
-        anticipatePin: 1,
-        invalidateOnRefresh: false,
-        animation: tl,
-        onUpdate: (self) => {
-          const p = self.progress;
-          currentProgressRef.current = p;
-          markScrollActivity();
+        masterTimelineRef.current = tl;
 
-          // Schedule RAF-batched canvas draw for latest scroll position
-          const targetFrame = Math.min(
-            TOTAL_FRAMES - 1,
-            Math.max(0, Math.round(p * (TOTAL_FRAMES - 1)))
-          );
-          scheduleFrameDraw(targetFrame);
+        const st = ScrollTrigger.create({
+          trigger: wrapper,
+          start: "top top",
+          end: () => `+=${Math.round(window.innerHeight * 8.0)}`,
+          pin: true,
+          // With Lenis smoothly interpolating wheel and touch inputs, scrub: true
+          // locks the timeline and canvas 1:1 to the smooth scroll position without lag
+          scrub: true,
+          fastScrollEnd: true,
+          anticipatePin: 1,
+          invalidateOnRefresh: false,
+          animation: tl,
+          onUpdate: (self) => {
+            const p = self.progress;
+            currentProgressRef.current = p;
+            markScrollActivity();
 
-          // Direct DOM update for right-edge progress bar (zero React re-renders)
-          if (progressFillRef.current) {
-            progressFillRef.current.style.transform = `scaleY(${p})`;
-          }
-          const shouldShowProgress = p > 0.015;
-          if (
-            progressContainerRef.current &&
-            shouldShowProgress !== progressVisibleRef.current
-          ) {
-            progressVisibleRef.current = shouldShowProgress;
-            progressContainerRef.current.style.opacity = shouldShowProgress
-              ? "1"
-              : "0";
-          }
+            // Schedule RAF-batched canvas draw for latest scroll position
+            const targetFrame = Math.min(
+              TOTAL_FRAMES - 1,
+              Math.max(0, Math.round(p * (TOTAL_FRAMES - 1)))
+            );
+            scheduleFrameDraw(targetFrame);
 
-          // Update React state only when crossing a section boundary
-          const nextSec = getSectionFromProgress(p);
-          if (nextSec !== activeSectionRef.current) {
-            activeSectionRef.current = nextSec;
-            setActiveSection(nextSec);
-          }
-        },
-      });
+            // Direct DOM update for right-edge progress bar (zero React re-renders)
+            if (progressFillRef.current) {
+              progressFillRef.current.style.transform = `scaleY(${p})`;
+            }
+            const shouldShowProgress = p > 0.015;
+            if (
+              progressContainerRef.current &&
+              shouldShowProgress !== progressVisibleRef.current
+            ) {
+              progressVisibleRef.current = shouldShowProgress;
+              progressContainerRef.current.style.opacity = shouldShowProgress
+                ? "1"
+                : "0";
+            }
 
-      scrollTriggerRef.current = st;
+            // Update React state only when crossing a section boundary
+            const nextSec = getSectionFromProgress(p);
+            if (nextSec !== activeSectionRef.current) {
+              activeSectionRef.current = nextSec;
+              setActiveSection(nextSec);
+            }
+          },
+        });
 
-      // Placeholder duration span so timeline explicitly runs from 0 to 100
-      tl.to({}, { duration: 100 }, 0);
+        scrollTriggerRef.current = st;
 
-      // =======================================================================
-      // PHASE A — HOME (t: 0 -> 19, Frames 1 -> 57)
-      // =======================================================================
-      tl.fromTo(
-        heroBlackCurtainRef.current,
+        // Placeholder duration span so timeline explicitly runs from 0 to 100
+        tl.to({}, { duration: 100 }, 0);
+
+        // =======================================================================
+        // PHASE A — HOME (t: 0 -> 19, Frames 1 -> 57)
+        // =======================================================================
+        tl.fromTo(
+          heroBlackCurtainRef.current,
         { opacity: 1 },
         { opacity: 0.14, duration: 7, ease: "power1.inOut" },
         0.2
@@ -945,10 +970,16 @@ export function CinematicExperience() {
           { autoAlpha: 0, pointerEvents: "none", duration: 1.5 },
           43
         );
+      });
 
-      // =======================================================================
-      // PHASE C — WORK (t: 45 -> 70, Frames 135 -> 210 — Red Sphere Sketch)
-      // =======================================================================
+      slice2Timer = window.setTimeout(() => {
+        if (isCancelled) return;
+        const tl = masterTimelineRef.current;
+        if (!tl) return;
+        ctx.add(() => {
+          // =======================================================================
+          // PHASE C — WORK (t: 45 -> 70, Frames 135 -> 210 — Red Sphere Sketch)
+          // =======================================================================
       const workEyebrowText = workEl.querySelector(
         '[data-anim="eyebrow-text"]'
       );
@@ -1244,20 +1275,16 @@ export function CinematicExperience() {
           { y: 0, opacity: 1, duration: 3.5, ease: "power2.out" },
           92.2
         );
-    }, wrapper);
 
-    // Handle initial URL hash and in-page hashchange
-    const handleHashNavigation = (instant = true) => {
-      const hash = window.location.hash.replace("#", "") as SectionId;
-      if (hash && hash !== "home" && hash in SECTION_SCROLL_ANCHORS) {
-        ScrollTrigger.refresh();
-        scrollToSection(hash, instant);
-      } else if (!hash || hash === "home") {
-        scrollToSection("home", instant);
-      }
-    };
+          const st = scrollTriggerRef.current;
+          if (st) {
+            tl.progress(st.progress);
+          }
+          handleHashNavigation(true);
+        });
+      }, 32);
+    }, slice1Delay);
 
-    handleHashNavigation(true);
     const onHashChange = () => handleHashNavigation(false);
     window.addEventListener("hashchange", onHashChange);
 
@@ -1268,9 +1295,11 @@ export function CinematicExperience() {
 
     const onPreloaderStart = () => {
       lenis.stop();
+      gsap.ticker.remove(tickerCallback);
     };
 
     const onPreloaderComplete = () => {
+      gsap.ticker.add(tickerCallback);
       lenis.start();
       wakeLoadersRef.current?.();
       scheduleFrameDraw(targetFrameRef.current, true);
@@ -1283,6 +1312,10 @@ export function CinematicExperience() {
     return () => {
       isCancelled = true;
       wakeLoadersRef.current = null;
+      window.clearTimeout(slice1Timer);
+      if (slice2Timer !== null) {
+        window.clearTimeout(slice2Timer);
+      }
       if (scrollIdleTimer !== null) {
         clearTimeout(scrollIdleTimer);
       }

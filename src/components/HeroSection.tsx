@@ -55,7 +55,8 @@ export function HeroSection({ sectionRef, onExploreWork }: HeroSectionProps) {
               alt="VISYNTH"
               width={730}
               height={156}
-              priority
+              loading="eager"
+              sizes="(max-width: 768px) 90vw, 42vw"
               className="absolute -left-[4.805%] -top-[34.78%] w-[109.61%] max-w-none h-auto"
             />
           </div>

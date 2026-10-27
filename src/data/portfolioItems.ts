@@ -192,4 +192,3 @@ export const PORTFOLIO_ITEMS: PortfolioItem[] = [
   },
 ];
 
-export const AVAILABLE_CATEGORIES: PortfolioCategory[] = DISCIPLINE_CATEGORIES;
