@@ -23,6 +23,10 @@ function preloadCinematicExperience(): Promise<React.ComponentType> {
   return experienceImportPromise;
 }
 
+if (typeof window !== "undefined" && hasSessionPreloadCompleted()) {
+  preloadCinematicExperience();
+}
+
 export function HomeEntry() {
   const [Experience, setExperience] = useState<React.ComponentType | null>(
     () => cachedExperienceComponent
@@ -41,7 +45,13 @@ export function HomeEntry() {
       });
     };
 
-    if (hasSessionPreloadCompleted()) {
+    const isRepeat =
+      typeof window !== "undefined" &&
+      (window.sessionStorage.getItem("visynth_seen_v4") === "true" ||
+        document.documentElement.classList.contains("visynth-preloaded") ||
+        hasSessionPreloadCompleted());
+
+    if (isRepeat) {
       activateExperience();
       return () => {
         isCancelled = true;

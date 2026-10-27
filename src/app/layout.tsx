@@ -97,7 +97,7 @@ export default function RootLayout({
       >
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(sessionStorage.getItem('visynth_seen_v4')==='true'){document.documentElement.classList.add('visynth-preloaded');}}catch(e){}`,
+            __html: `try{if(sessionStorage.getItem('visynth_seen_v4')==='true'){document.documentElement.classList.add('visynth-preloaded');document.body.classList.add('visynth-preloaded');}}catch(e){}`,
           }}
         />
         <script

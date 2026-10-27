@@ -1,5 +1,6 @@
-import { HomeEntry } from "@/components/HomeEntry";
+import { CinematicExperience } from "@/components/CinematicExperience";
 
 export default function Home() {
-  return <HomeEntry />;
+  return <CinematicExperience />;
 }
+

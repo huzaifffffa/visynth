@@ -30,11 +30,29 @@ export function getSharedFrameStates(): Uint8Array {
 }
 
 export function hasSessionPreloadCompleted(): boolean {
-  return hasCompletedSessionPreload;
+  if (hasCompletedSessionPreload) return true;
+  if (typeof window !== "undefined") {
+    try {
+      if (
+        window.sessionStorage.getItem("visynth_seen_v4") === "true" ||
+        document.documentElement.classList.contains("visynth-preloaded")
+      ) {
+        hasCompletedSessionPreload = true;
+        return true;
+      }
+    } catch {}
+  }
+  return false;
 }
 
 export function markSessionPreloadCompleted(): void {
   hasCompletedSessionPreload = true;
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.setItem("visynth_seen_v4", "true");
+      document.documentElement.classList.add("visynth-preloaded");
+    } catch {}
+  }
 }
 
 // Lock the frame variant (desktop vs mobile) once per session so shared cache keys match

@@ -19,8 +19,8 @@ html {
   overscroll-behavior-y: none;
 }
 
-html:has([data-testid="site-preloader"]:not([data-exiting="true"])),
-body:has([data-testid="site-preloader"]:not([data-exiting="true"])) {
+html:not(.visynth-preloaded):has([data-testid="site-preloader"]:not([data-exiting="true"])),
+html:not(.visynth-preloaded) body:has([data-testid="site-preloader"]:not([data-exiting="true"])) {
   overflow: hidden !important;
 }
 
@@ -105,11 +105,6 @@ body {
 
 .preloader-scan-line {
   animation: preloaderScanLine 5.5s linear infinite;
-}
-
-[data-testid="site-preloader"]:not([data-exiting="true"]) + #visynth-app-content {
-  content-visibility: hidden;
-  contain-intrinsic-size: 100vw 100vh;
 }
 
 @media (prefers-reduced-motion: reduce) {

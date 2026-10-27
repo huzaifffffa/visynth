@@ -22,18 +22,7 @@ const SESSION_STORAGE_KEY = "visynth_seen_v4";
  * - Frame 04: "THE REVEAL" — Restrained editorial curtain reveal seamlessly unveiling the hero.
  */
 export function SitePreloader() {
-  const [isUnmounted, setIsUnmounted] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return (
-        window.sessionStorage.getItem(SESSION_STORAGE_KEY) === "true" ||
-        document.documentElement.classList.contains("visynth-preloaded") ||
-        hasSessionPreloadCompleted()
-      );
-    } catch {
-      return false;
-    }
-  });
+  const [isUnmounted, setIsUnmounted] = useState<boolean>(false);
 
   const [isExiting, setIsExiting] = useState(false);
 
@@ -56,9 +45,20 @@ export function SitePreloader() {
   const skipHandlerRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
+    const isRepeatVisit =
+      typeof window !== "undefined" &&
+      (window.sessionStorage.getItem(SESSION_STORAGE_KEY) === "true" ||
+        document.documentElement.classList.contains("visynth-preloaded") ||
+        hasSessionPreloadCompleted());
+
     // If already visited this session, unlock instantly
-    if (isUnmounted) {
+    if (isUnmounted || isRepeatVisit) {
       markSessionPreloadCompleted();
+      document.body.style.overflow = "";
+      document.body.style.overscrollBehavior = "";
+      setIsUnmounted(true);
+      window.dispatchEvent(new CustomEvent("visynth:preloader-exit-start"));
+      window.dispatchEvent(new CustomEvent("visynth:preloader-complete"));
       return;
     }
 

@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import type gsap from "gsap";
-import type { ScrollTrigger as ScrollTriggerInstance } from "gsap/ScrollTrigger";
-import type Lenis from "lenis";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import Lenis from "lenis";
 import {
   getFrameUrl,
   getSharedFrames,
@@ -15,17 +15,10 @@ import {
 import { SectionId, SiteNavigation } from "./SiteNavigation";
 import { ScrollProgressIndicator } from "./ScrollProgressIndicator";
 import { HeroSection } from "./HeroSection";
-import type { SkillsSection as SkillsSectionType } from "./SkillsSection";
-import type { WorkSection as WorkSectionType } from "./WorkSection";
-import type { AboutSection as AboutSectionType } from "./AboutSection";
-import type { ContactSection as ContactSectionType } from "./ContactSection";
-
-interface DeferredScrollSections {
-  SkillsSection: typeof SkillsSectionType;
-  WorkSection: typeof WorkSectionType;
-  AboutSection: typeof AboutSectionType;
-  ContactSection: typeof ContactSectionType;
-}
+import { SkillsSection } from "./SkillsSection";
+import { WorkSection } from "./WorkSection";
+import { AboutSection } from "./AboutSection";
+import { ContactSection } from "./ContactSection";
 
 const TOTAL_FRAMES = 300;
 const DEFAULT_FRAME_WIDTH = 1280;
@@ -186,21 +179,12 @@ const NavigationOverlay = React.memo(function NavigationOverlay({
 
 export function CinematicExperience() {
   const activeSectionRef = useRef<SectionId>("home");
-  const [areScrollSectionsMounted, setAreScrollSectionsMounted] =
-    useState<boolean>(() => hasSessionPreloadCompleted());
-  const [deferredSections, setDeferredSections] =
-    useState<DeferredScrollSections | null>(null);
-  const startTimelineSetupRef = useRef<(() => void) | null>(null);
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const ctx2dRef = useRef<CanvasRenderingContext2D | null>(null);
-  const scrollTriggerRef = useRef<ScrollTriggerInstance | null>(null);
-  const scrollTriggerClassRef = useRef<typeof ScrollTriggerInstance | null>(
-    null
-  );
-  const gsapRef = useRef<typeof gsap | null>(null);
+  const scrollTriggerRef = useRef<ScrollTrigger | null>(null);
   const masterTimelineRef = useRef<gsap.core.Timeline | null>(null);
   const lenisRef = useRef<Lenis | null>(null);
 
@@ -283,7 +267,9 @@ export function CinematicExperience() {
 
     // Fallback to nearest already-decoded frame if user scrubs ahead of network load
     if (!img) {
-      for (let offset = 1; offset < TOTAL_FRAMES; offset++) {
+      const lastDrawn = lastDrawnFrameRef.current;
+      const maxOffset = lastDrawn !== -1 ? 24 : TOTAL_FRAMES;
+      for (let offset = 1; offset < maxOffset; offset++) {
         const prev = targetIdx - offset;
         if (prev >= 0 && images[prev]) {
           img = images[prev];
@@ -296,6 +282,9 @@ export function CinematicExperience() {
           resolvedIndex = next;
           break;
         }
+      }
+      if (!img && lastDrawn !== -1) {
+        return;
       }
     }
 
@@ -408,7 +397,7 @@ export function CinematicExperience() {
         });
       }
       if (instant) {
-        scrollTriggerClassRef.current?.update();
+        ScrollTrigger.update();
       }
     },
     [scheduleFrameDraw]
@@ -422,10 +411,6 @@ export function CinematicExperience() {
     if (!wrapper || !homeEl) {
       return;
     }
-
-    const tickerCallback = (time: number) => {
-      lenisRef.current?.raf(time * 1000);
-    };
 
     const prefersReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
@@ -502,7 +487,7 @@ export function CinematicExperience() {
       }
 
       if (widthChanged && scrollTriggerRef.current) {
-        scrollTriggerClassRef.current?.refresh();
+        ScrollTrigger.refresh();
       }
     };
 
@@ -738,99 +723,54 @@ export function CinematicExperience() {
     const handleHashNavigation = (instant = true) => {
       const hash = window.location.hash.replace("#", "") as SectionId;
       if (hash && hash !== "home" && hash in SECTION_SCROLL_ANCHORS) {
-        scrollTriggerClassRef.current?.refresh();
+        ScrollTrigger.refresh();
         scrollToSection(hash, instant);
-      } else if (hash === "home" || window.scrollY > 0) {
+      } else if (hash === "home") {
         scrollToSection("home", instant);
       }
     };
 
-    // =========================================================================
-    // Deferred Code-Splitting Loader for GSAP, ScrollTrigger, Lenis, and Scroll Sections
-    // =========================================================================
-    let gsapCtx: gsap.Context | null = null;
-    let modulesLoadPromise: Promise<void> | null = null;
-    const ensureDeferredModulesLoaded = (): Promise<void> => {
-      if (modulesLoadPromise) return modulesLoadPromise;
-      modulesLoadPromise = Promise.all([
-        import("gsap"),
-        import("gsap/ScrollTrigger"),
-        import("lenis"),
-        import("./SkillsSection"),
-        import("./WorkSection"),
-        import("./AboutSection"),
-        import("./ContactSection"),
-      ]).then(
-        ([
-          gsapMod,
-          stMod,
-          lenisMod,
-          skillsMod,
-          workMod,
-          aboutMod,
-          contactMod,
-        ]) => {
-          if (isCancelled) return;
-          const gsap = gsapMod.default;
-          const ST = stMod.ScrollTrigger;
-          gsap.registerPlugin(ST);
-          gsap.ticker.lagSmoothing(0);
-          gsapRef.current = gsap;
-          scrollTriggerClassRef.current = ST;
-          if (!gsapCtx) {
-            gsapCtx = gsap.context(() => {}, wrapper);
-          }
+    gsap.registerPlugin(ScrollTrigger);
+    gsap.ticker.lagSmoothing(0);
 
-          if (!lenisRef.current) {
-            const LenisClass = lenisMod.default;
-            const lenis = new LenisClass({
-              duration: 0.95,
-              easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-              orientation: "vertical",
-              gestureOrientation: "vertical",
-              smoothWheel: true,
-              wheelMultiplier: 0.9,
-              touchMultiplier: 1.15,
-              syncTouch: false,
-              autoResize: true,
-            });
-            lenis.on("scroll", ST.update);
-            if (!hasSessionPreloadCompleted()) {
-              lenis.stop();
-            } else {
-              gsap.ticker.add(tickerCallback);
-            }
-            lenisRef.current = lenis;
-          }
+    const isMobile = capabilities.isMobile;
+    const lenis = new Lenis({
+      duration: isMobile ? 0.35 : 0.55,
+      easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      orientation: "vertical",
+      gestureOrientation: "vertical",
+      smoothWheel: true,
+      wheelMultiplier: 1.05,
+      touchMultiplier: 1.0,
+      syncTouch: false,
+      autoResize: true,
+    });
+    lenis.on("scroll", ScrollTrigger.update);
+    lenisRef.current = lenis;
 
-          setDeferredSections({
-            SkillsSection: skillsMod.SkillsSection,
-            WorkSection: workMod.WorkSection,
-            AboutSection: aboutMod.AboutSection,
-            ContactSection: contactMod.ContactSection,
-          });
-        }
-      );
-      return modulesLoadPromise;
+    const tickerCallback = (time: number) => {
+      lenisRef.current?.raf(time * 1000);
     };
+    gsap.ticker.add(tickerCallback);
+
+    if (!hasSessionPreloadCompleted()) {
+      lenis.stop();
+    }
+
+    const gsapCtx = gsap.context(() => {}, wrapper);
 
     // =========================================================================
     // Master GSAP ScrollTrigger Timeline (t = 0 -> 100)
-    // Deferred while the preloader is active (scroll is locked), and initialized
-    // as soon as preloader exit begins so zero ScrollTrigger layout/tween work
-    // blocks the main thread during initial page load.
     // =========================================================================
     let timelineInitialized = false;
 
     const startTimelineSetup = () => {
       if (isCancelled || timelineInitialized) return;
-      const gsap = gsapRef.current;
-      const ST = scrollTriggerClassRef.current;
       const skillsEl = skillsRef.current;
       const workEl = workRef.current;
       const aboutEl = aboutRef.current;
       const contactEl = contactRef.current;
-      if (!gsap || !gsapCtx || !ST || !skillsEl || !workEl || !aboutEl || !contactEl)
+      if (!skillsEl || !workEl || !aboutEl || !contactEl)
         return;
       timelineInitialized = true;
 
@@ -841,7 +781,7 @@ export function CinematicExperience() {
 
         masterTimelineRef.current = tl;
 
-        const st = ST.create({
+        const st = ScrollTrigger.create({
           trigger: wrapper,
           start: "top top",
           end: () => `+=${Math.round(window.innerHeight * 8.0)}`,
@@ -858,13 +798,16 @@ export function CinematicExperience() {
             currentProgressRef.current = p;
             markScrollActivity();
 
-            // Direct synchronous canvas draw for latest scroll position in lockstep with GSAP transforms
             const targetFrame = Math.min(
               TOTAL_FRAMES - 1,
               Math.max(0, Math.round(p * (TOTAL_FRAMES - 1)))
             );
             targetFrameRef.current = targetFrame;
-            renderFrameNow(targetFrame);
+            if (imagesRef.current[targetFrame] && lastDrawnFrameRef.current !== targetFrame) {
+              renderFrameNow(targetFrame);
+            } else if (!imagesRef.current[targetFrame]) {
+              scheduleFrameDraw(targetFrame);
+            }
 
             // Direct DOM update for right-edge progress bar (zero React re-renders)
             if (progressFillRef.current) {
@@ -1390,15 +1333,9 @@ export function CinematicExperience() {
         handleHashNavigation(true);
       });
     };
-    startTimelineSetupRef.current = startTimelineSetup;
 
     const onHashChange = () => handleHashNavigation(false);
     window.addEventListener("hashchange", onHashChange);
-
-    const onPreloaderStart = () => {
-      lenisRef.current?.stop();
-      gsapRef.current?.ticker.remove(tickerCallback);
-    };
 
     const prepareForReveal = () => {
       applyCanvasSize(true);
@@ -1413,48 +1350,38 @@ export function CinematicExperience() {
         }
       });
 
-      setAreScrollSectionsMounted(true);
-      Promise.all([ensureDeferredModulesLoaded(), frame0Promise]).then(() => {
-        if (!isCancelled) {
-          startTimelineSetup();
-          window.requestAnimationFrame(() => {
-            notifyRevealReady();
-          });
-        }
+      startTimelineSetup();
+      ScrollTrigger.refresh();
+      window.requestAnimationFrame(() => {
+        notifyRevealReady();
       });
     };
 
-    // Since HomeEntry mounts CinematicExperience when preloader exit begins (or when session preload is already complete),
-    // immediately prepare the canvas, sections, and timeline for reveal.
     prepareForReveal();
 
-    const onPreloaderExitStart = () => {
-      prepareForReveal();
+    const onPreloaderStart = () => {
+      lenisRef.current?.stop();
     };
 
     const onPreloaderComplete = () => {
-      prepareForReveal();
-      ensureDeferredModulesLoaded().then(() => {
-        if (isCancelled) return;
-        startTimelineSetup();
-        gsapRef.current?.ticker.add(tickerCallback);
-        lenisRef.current?.start();
-        wakeLoadersRef.current?.();
-        scheduleFrameDraw(targetFrameRef.current, true);
-        scrollTriggerClassRef.current?.refresh();
-      });
+      lenisRef.current?.start();
+      wakeLoadersRef.current?.();
+      scheduleFrameDraw(targetFrameRef.current, true);
+      ScrollTrigger.refresh();
     };
 
     window.addEventListener("visynth:preloader-start", onPreloaderStart);
-    window.addEventListener(
-      "visynth:preloader-exit-start",
-      onPreloaderExitStart
-    );
     window.addEventListener("visynth:preloader-complete", onPreloaderComplete);
+
+    if (hasSessionPreloadCompleted()) {
+      lenisRef.current?.start();
+      wakeLoadersRef.current?.();
+      scheduleFrameDraw(targetFrameRef.current, true);
+      ScrollTrigger.refresh();
+    }
 
     return () => {
       isCancelled = true;
-      startTimelineSetupRef.current = null;
       wakeLoadersRef.current = null;
       if (scrollIdleTimer !== null) {
         clearTimeout(scrollIdleTimer);
@@ -1470,14 +1397,10 @@ export function CinematicExperience() {
       window.removeEventListener("hashchange", onHashChange);
       window.removeEventListener("visynth:preloader-start", onPreloaderStart);
       window.removeEventListener(
-        "visynth:preloader-exit-start",
-        onPreloaderExitStart
-      );
-      window.removeEventListener(
         "visynth:preloader-complete",
         onPreloaderComplete
       );
-      gsapRef.current?.ticker.remove(tickerCallback);
+      gsap.ticker.remove(tickerCallback);
       lenisRef.current?.destroy();
       lenisRef.current = null;
       if (scrollTriggerRef.current) scrollTriggerRef.current.kill();
@@ -1485,21 +1408,13 @@ export function CinematicExperience() {
     };
   }, [renderFrameNow, scheduleFrameDraw, scrollToSection]);
 
-  useEffect(() => {
-    if (areScrollSectionsMounted && deferredSections) {
-      startTimelineSetupRef.current?.();
-    }
-  }, [areScrollSectionsMounted, deferredSections]);
-
   return (
     <div className="relative w-full bg-[#000000] text-white">
-      {areScrollSectionsMounted && (
-        <NavigationOverlay
-          onNavigate={scrollToSection}
-          progressFillRef={progressFillRef}
-          progressContainerRef={progressContainerRef}
-        />
-      )}
+      <NavigationOverlay
+        onNavigate={scrollToSection}
+        progressFillRef={progressFillRef}
+        progressContainerRef={progressContainerRef}
+      />
 
       {/* Pinned Master Viewport */}
       <div
@@ -1549,23 +1464,19 @@ export function CinematicExperience() {
             onExploreWork={() => scrollToSection("work")}
           />
 
-          {areScrollSectionsMounted && deferredSections && (
-            <>
-              <deferredSections.SkillsSection sectionRef={skillsRef} />
+          <SkillsSection sectionRef={skillsRef} />
 
-              <deferredSections.WorkSection
-                sectionRef={workRef}
-                onNavigateContact={() => scrollToSection("contact")}
-              />
+          <WorkSection
+            sectionRef={workRef}
+            onNavigateContact={() => scrollToSection("contact")}
+          />
 
-              <deferredSections.AboutSection sectionRef={aboutRef} />
+          <AboutSection sectionRef={aboutRef} />
 
-              <deferredSections.ContactSection
-                sectionRef={contactRef}
-                onReturnHome={() => scrollToSection("home")}
-              />
-            </>
-          )}
+          <ContactSection
+            sectionRef={contactRef}
+            onReturnHome={() => scrollToSection("home")}
+          />
         </div>
       </div>
     </div>
