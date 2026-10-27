@@ -184,7 +184,7 @@ export const ContactSection = React.memo(function ContactSection({
       ref={sectionRef}
       id="contact"
       aria-label="Contact"
-      className="absolute inset-0 z-20 flex flex-col justify-between w-full h-full pt-[clamp(64px,5.6vw,90px)] pl-[5.95%] pr-[5.95%] opacity-0 pointer-events-none select-none invisible overflow-y-auto overflow-x-hidden"
+      className="absolute inset-0 z-20 flex flex-col justify-between w-full h-full pt-[clamp(64px,5.6vw,90px)] pl-[5.95%] pr-[5.95%] opacity-0 pointer-events-none select-none will-change-[opacity,transform] overflow-y-auto overflow-x-hidden"
     >
       <div className="flex-1 flex items-center w-full py-4 sm:py-6">
         <div
@@ -233,7 +233,7 @@ export const ContactSection = React.memo(function ContactSection({
               <div
                 role="status"
                 aria-live="polite"
-                className="w-full max-w-xl bg-black/85 backdrop-blur-md border border-white/15 p-5 sm:p-7 space-y-4 rounded-sm shadow-[0_16px_40px_rgba(0,0,0,0.85)]"
+                className="w-full max-w-xl bg-[#080808]/95 border border-white/15 p-5 sm:p-7 space-y-4 rounded-sm shadow-[0_16px_40px_rgba(0,0,0,0.85)]"
               >
                 <div className="flex items-center gap-2.5">
                   <span
@@ -278,7 +278,7 @@ export const ContactSection = React.memo(function ContactSection({
                 {/* Subtle dark local overlay behind form ensuring high contrast against any frame */}
                 <div
                   aria-hidden="true"
-                  className="absolute -inset-2 sm:-inset-3 bg-black/80 backdrop-blur-md rounded-md border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.92)] pointer-events-none"
+                  className="absolute -inset-2 sm:-inset-3 bg-[#080808]/95 rounded-md border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.92)] pointer-events-none"
                 />
 
                 <form

@@ -23,7 +23,7 @@ export const HeroSection = React.memo(function HeroSection({
       ref={sectionRef}
       id="home"
       aria-label="Home"
-      className="absolute inset-0 z-20 flex flex-col justify-between w-full h-full pt-[clamp(60px,5.2vw,90px)] select-none"
+      className="absolute inset-0 z-20 flex flex-col justify-between w-full h-full pt-[clamp(60px,5.2vw,90px)] select-none will-change-[opacity,transform]"
     >
       {/* Vertically centered content container on mobile: sits in the middle left */}
       <div className="flex-1 flex items-center w-full pl-[5.95%] pr-[5.95%] pt-0 pb-6 sm:pb-12">

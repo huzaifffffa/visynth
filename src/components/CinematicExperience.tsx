@@ -153,7 +153,9 @@ const NavigationOverlay = React.memo(function NavigationOverlay({
     const handleSectionChange = (e: Event) => {
       const customEvent = e as CustomEvent<SectionId>;
       if (customEvent.detail) {
-        setActiveSection(customEvent.detail);
+        React.startTransition(() => {
+          setActiveSection(customEvent.detail);
+        });
       }
     };
     window.addEventListener("visynth:active-section", handleSectionChange);
@@ -451,8 +453,17 @@ export function CinematicExperience() {
         window.devicePixelRatio || 1,
         capabilities.maxDpr
       );
-      const width = Math.max(1, Math.round(vw * dpr));
-      const height = Math.max(1, Math.round(vh * dpr));
+      // Cap backing resolution to 1920x1080 (desktop) / 1280 (mobile) so high-DPR screens
+      // don't blow up to 5+ Megapixels (which starves GPU fill-rate on 60/120fps scrub)
+      const targetMaxDim = capabilities.isMobile ? 1280 : 1920;
+      let width = Math.max(1, Math.round(vw * dpr));
+      let height = Math.max(1, Math.round(vh * dpr));
+      const maxDim = Math.max(width, height);
+      if (maxDim > targetMaxDim) {
+        const scale = targetMaxDim / maxDim;
+        width = Math.max(1, Math.round(width * scale));
+        height = Math.max(1, Math.round(height * scale));
+      }
 
       if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width;
@@ -649,19 +660,10 @@ export function CinematicExperience() {
     let scrollIdleTimer: ReturnType<typeof setTimeout> | null = null;
 
     const getEffectiveConcurrency = (): number => {
-      if (!isActivelyScrolling) return capabilities.concurrency;
-      // While actively scrolling, if a nearby frame (within ±8) is already decoded,
-      // pause spawning new decodes during the scroll gesture so 100% of frame budget goes to 60fps rendering.
-      const center = targetFrameRef.current;
-      for (let d = 0; d <= 8; d++) {
-        if (
-          (center - d >= 0 && frameStates[center - d] === FRAME_LOADED) ||
-          (center + d < TOTAL_FRAMES && frameStates[center + d] === FRAME_LOADED)
-        ) {
-          return 0;
-        }
-      }
-      return Math.min(2, capabilities.concurrency);
+      // While actively scrolling, pause spawning image decodes so 100% of CPU and GPU
+      // render budget goes directly to locked 60fps scrolling and canvas presentation
+      if (isActivelyScrolling) return 0;
+      return capabilities.concurrency;
     };
 
     const spawnWorker = () => {
@@ -698,7 +700,7 @@ export function CinematicExperience() {
       scrollIdleTimer = setTimeout(() => {
         isActivelyScrolling = false;
         wakeLoadWorkers();
-      }, 140);
+      }, 90);
     };
     wakeLoadersRef.current = wakeLoadWorkers;
 
@@ -750,6 +752,10 @@ export function CinematicExperience() {
 
     const tickerCallback = (time: number) => {
       lenisRef.current?.raf(time * 1000);
+      const target = pendingDrawFrameRef.current;
+      if (lastDrawnFrameRef.current !== target) {
+        renderFrameNow(target);
+      }
     };
     gsap.ticker.add(tickerCallback);
 
@@ -803,11 +809,7 @@ export function CinematicExperience() {
               Math.max(0, Math.round(p * (TOTAL_FRAMES - 1)))
             );
             targetFrameRef.current = targetFrame;
-            if (imagesRef.current[targetFrame] && lastDrawnFrameRef.current !== targetFrame) {
-              renderFrameNow(targetFrame);
-            } else if (!imagesRef.current[targetFrame]) {
-              scheduleFrameDraw(targetFrame);
-            }
+            pendingDrawFrameRef.current = targetFrame;
 
             // Direct DOM update for right-edge progress bar (zero React re-renders)
             if (progressFillRef.current) {
@@ -917,8 +919,8 @@ export function CinematicExperience() {
         )
         .fromTo(
           homeEl,
-          { autoAlpha: 1, pointerEvents: "auto" },
-          { autoAlpha: 0, pointerEvents: "none", duration: 2, ease: "power1.in" },
+          { opacity: 1, pointerEvents: "auto" },
+          { opacity: 0, pointerEvents: "none", duration: 2, ease: "power1.in" },
           16.5
         );
 
@@ -942,8 +944,8 @@ export function CinematicExperience() {
 
       tl.fromTo(
         skillsEl,
-        { autoAlpha: 0, pointerEvents: "none" },
-        { autoAlpha: 1, pointerEvents: "auto", duration: 2 },
+        { opacity: 0, pointerEvents: "none" },
+        { opacity: 1, pointerEvents: "auto", duration: 2 },
         20
       )
         .fromTo(
@@ -1024,7 +1026,7 @@ export function CinematicExperience() {
         )
         .to(
           skillsEl,
-          { autoAlpha: 0, pointerEvents: "none", duration: 1.5 },
+          { opacity: 0, pointerEvents: "none", duration: 1.5 },
           43
         );
 
@@ -1053,8 +1055,8 @@ export function CinematicExperience() {
       )
         .fromTo(
           workEl,
-          { autoAlpha: 0, pointerEvents: "none" },
-          { autoAlpha: 1, pointerEvents: "auto", duration: 2 },
+          { opacity: 0, pointerEvents: "none" },
+          { opacity: 1, pointerEvents: "auto", duration: 2 },
           45.5
         )
         .fromTo(
@@ -1141,7 +1143,7 @@ export function CinematicExperience() {
         )
         .to(
           workEl,
-          { autoAlpha: 0, pointerEvents: "none", duration: 1.5 },
+          { opacity: 0, pointerEvents: "none", duration: 1.5 },
           69.5
         )
         .to(
@@ -1170,8 +1172,8 @@ export function CinematicExperience() {
 
       tl.fromTo(
         aboutEl,
-        { autoAlpha: 0, pointerEvents: "none" },
-        { autoAlpha: 1, pointerEvents: "auto", duration: 2 },
+        { opacity: 0, pointerEvents: "none" },
+        { opacity: 1, pointerEvents: "auto", duration: 2 },
         71.5
       )
         .fromTo(
@@ -1258,7 +1260,7 @@ export function CinematicExperience() {
         )
         .to(
           aboutEl,
-          { autoAlpha: 0, pointerEvents: "none", duration: 1.5 },
+          { opacity: 0, pointerEvents: "none", duration: 1.5 },
           87.2
         );
 
@@ -1286,8 +1288,8 @@ export function CinematicExperience() {
       )
         .fromTo(
           contactEl,
-          { autoAlpha: 0, pointerEvents: "none" },
-          { autoAlpha: 1, pointerEvents: "auto", duration: 2 },
+          { opacity: 0, pointerEvents: "none" },
+          { opacity: 1, pointerEvents: "auto", duration: 2 },
           88
         )
         .fromTo(
@@ -1428,7 +1430,7 @@ export function CinematicExperience() {
             width={DEFAULT_FRAME_WIDTH}
             height={DEFAULT_FRAME_HEIGHT}
             aria-hidden="true"
-            className="absolute inset-0 z-0 w-full h-full pointer-events-none select-none"
+            className="absolute inset-0 z-0 w-full h-full pointer-events-none select-none will-change-[transform]"
           />
 
           {/* Layer 2a: Base Left-Side Vignette for Typography Readability */}
@@ -1441,21 +1443,21 @@ export function CinematicExperience() {
           <div
             ref={workContrastVeilRef}
             aria-hidden="true"
-            className="absolute inset-0 z-10 opacity-0 pointer-events-none bg-[linear-gradient(90deg,rgba(0,0,0,0.92)_0%,rgba(0,0,0,0.78)_44%,rgba(0,0,0,0.22)_74%,rgba(0,0,0,0.08)_100%)]"
+            className="absolute inset-0 z-10 opacity-0 pointer-events-none bg-[linear-gradient(90deg,rgba(0,0,0,0.92)_0%,rgba(0,0,0,0.78)_44%,rgba(0,0,0,0.22)_74%,rgba(0,0,0,0.08)_100%)] will-change-[opacity]"
           />
 
           {/* Layer 2c: Crimson-Dark Atmospheric Settling Overlay for Final Contact Scene */}
           <div
             ref={crimsonAtmosphereRef}
             aria-hidden="true"
-            className="absolute inset-0 z-10 opacity-0 pointer-events-none bg-[radial-gradient(circle_at_75%_55%,rgba(180,15,15,0.16),rgba(0,0,0,0.78)_70%)]"
+            className="absolute inset-0 z-10 opacity-0 pointer-events-none bg-[radial-gradient(circle_at_75%_55%,rgba(180,15,15,0.16),rgba(0,0,0,0.78)_70%)] will-change-[opacity]"
           />
 
           {/* Layer 2d: Pure #000000 Curtain Preserving Exact Initial Hero Appearance at Scroll = 0 */}
           <div
             ref={heroBlackCurtainRef}
             aria-hidden="true"
-            className="absolute inset-0 z-10 bg-[#000000] pointer-events-none"
+            className="absolute inset-0 z-10 bg-[#000000] pointer-events-none will-change-[opacity]"
           />
 
           {/* Layer 3: Synchronized Section Content */}

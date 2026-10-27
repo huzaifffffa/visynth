@@ -43,7 +43,7 @@ export const SkillsSection = React.memo(function SkillsSection({
       ref={sectionRef}
       id="skills"
       aria-label="Skills"
-      className="absolute inset-0 z-20 flex items-center w-full h-full pt-[clamp(64px,5.6vw,90px)] pl-[5.95%] pr-[5.95%] opacity-0 pointer-events-none select-none invisible"
+      className="absolute inset-0 z-20 flex items-center w-full h-full pt-[clamp(64px,5.6vw,90px)] pl-[5.95%] pr-[5.95%] opacity-0 pointer-events-none select-none will-change-[opacity,transform]"
     >
       <div
         data-skills="container"

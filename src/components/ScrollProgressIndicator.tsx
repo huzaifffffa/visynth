@@ -10,7 +10,7 @@ interface ScrollProgressIndicatorProps {
   onNavigate: (section: SectionId) => void;
 }
 
-export function ScrollProgressIndicator({
+export const ScrollProgressIndicator = React.memo(function ScrollProgressIndicator({
   activeSection,
   progressRef,
   containerRef,
@@ -64,5 +64,5 @@ export function ScrollProgressIndicator({
       </div>
     </div>
   );
-}
+});
 

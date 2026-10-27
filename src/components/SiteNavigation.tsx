@@ -21,7 +21,7 @@ interface SiteNavigationProps {
   isSubPage?: boolean;
 }
 
-export function SiteNavigation({
+export const SiteNavigation = React.memo(function SiteNavigation({
   activeSection,
   onNavigate,
   isPortfolioPage = false,
@@ -63,7 +63,7 @@ export function SiteNavigation({
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 w-full h-[clamp(64px,5.6vw,90px)] border-b border-white/[0.11] bg-gradient-to-b from-black/85 via-black/50 to-black/10 backdrop-blur-[2px] flex items-center justify-between pl-[5.8%] pr-[5.8%] select-none">
+    <header className="fixed top-0 left-0 right-0 z-50 w-full h-[clamp(64px,5.6vw,90px)] border-b border-white/[0.11] bg-gradient-to-b from-black/92 via-black/75 to-black/25 flex items-center justify-between pl-[5.8%] pr-[5.8%] select-none transform-gpu will-change-transform">
       {/* Brand Logo (Left) — Preserved exactly */}
       <Link
         href={isExternalRoute ? "/" : "#home"}
@@ -105,13 +105,13 @@ export function SiteNavigation({
               {/* Active Red Glow Indicator */}
               <span
                 aria-hidden="true"
-                className={`pointer-events-none absolute left-1/2 -translate-x-1/2 -bottom-[clamp(6px,0.65vw,10px)] flex items-center justify-center w-[clamp(40px,4.2vw,60px)] transition-opacity duration-300 ${
+                className={`pointer-events-none absolute left-1/2 -translate-x-1/2 -bottom-[clamp(6px,0.65vw,10px)] flex items-center justify-center w-[clamp(40px,4.2vw,60px)] transition-opacity duration-300 will-change-[opacity] ${
                   isActive ? "opacity-100" : "opacity-0"
                 }`}
               >
-                <span className="absolute w-full h-[14px] rounded-full bg-[#ff1a1a]/35 blur-[6px]" />
+                <span className="absolute w-full h-[14px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,26,26,0.45)_0%,rgba(255,26,26,0)_70%)]" />
                 <span className="w-full h-[1px] bg-gradient-to-r from-transparent via-[#ff2a2a] to-transparent opacity-95" />
-                <span className="absolute w-[3.5px] h-[3.5px] rounded-full bg-[#ff3b3b] shadow-[0_0_8px_2px_rgba(255,35,35,0.95)]" />
+                <span className="absolute w-[3.5px] h-[3.5px] rounded-full bg-[#ff3b3b] shadow-[0_0_8px_rgba(255,35,35,0.95)]" />
               </span>
             </Link>
           );
@@ -227,4 +227,4 @@ export function SiteNavigation({
       </div>
     </header>
   );
-}
+});
