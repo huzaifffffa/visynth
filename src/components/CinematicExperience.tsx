@@ -562,19 +562,19 @@ export function CinematicExperience() {
       }
 
       // Tier 2: Coarse keyframes (stride 8) outward from current scroll position
-      candidate = findOutward(TOTAL_FRAMES, 8);
+      candidate = findOutward(32, 8);
       if (candidate !== -1) return candidate;
 
       // Tier 3: Medium density (stride 4, then stride 2) outward from current scroll position
-      candidate = findOutward(TOTAL_FRAMES, 4);
+      candidate = findOutward(32, 4);
       if (candidate !== -1) return candidate;
 
-      candidate = findOutward(TOTAL_FRAMES, 2);
+      candidate = findOutward(32, 2);
       if (candidate !== -1) return candidate;
 
       // Tier 4: Full density (stride 1)
       // On slow devices, only fill stride-1 within ±32 frames of current scroll position
-      const denseRadius = capabilities.isSlowDevice ? 32 : TOTAL_FRAMES;
+      const denseRadius = capabilities.isSlowDevice ? 16 : 32;
       return findOutward(denseRadius, 1);
     };
 
@@ -608,6 +608,16 @@ export function CinematicExperience() {
             }
             imagesRef.current[frameIndex] = img;
             frameStates[frameIndex] = FRAME_LOADED;
+            // Keep decoded memory bounded while compressed frames remain in
+            // HTTP cache. Distant frames are decoded again only on demand.
+            for (let index = 0; index < TOTAL_FRAMES; index++) {
+              if (Math.abs(index - targetFrameRef.current) > 48 &&
+                  !REDUCED_MOTION_KEYFRAMES.includes(index) &&
+                  frameStates[index] === FRAME_LOADED) {
+                imagesRef.current[index] = null;
+                frameStates[index] = FRAME_UNLOADED;
+              }
+            }
 
             // Only schedule a canvas update if the canvas has not yet drawn the exact target frame
             // and this newly decoded frame is closer to targetFrame than what is currently drawn

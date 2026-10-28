@@ -84,6 +84,11 @@ export function SitePreloader() {
 
     const finishExit = () => {
       if (isDisposed) return;
+      // Returning null does not unmount this component or run effect cleanup.
+      // Release the intro's keyboard lock at dismissal, not just on navigation.
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
+      window.clearTimeout(storyFallbackTimer);
+      masterTimeline?.kill();
       markSessionPreloadCompleted();
       try { window.sessionStorage.setItem("visynth_intro_seen", "true"); } catch {}
       unlock();

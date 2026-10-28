@@ -1,0 +1,170 @@
+{
+  "label": "bounded",
+  "url": "http://127.0.0.1:3102",
+  "traceEventCount": 225446,
+  "rendererTaskCount": 21957,
+  "rendererTaskP95Ms": 2.54,
+  "longTaskCount": 11,
+  "longestTaskMs": 586.19,
+  "animationFrameCount": 622,
+  "animationFrameP95Ms": 48.05,
+  "animationFramesOver20Ms": 265,
+  "animationFramesOver50Ms": 15,
+  "eventDispatchCount": 655,
+  "eventDispatchP95Ms": 0.89,
+  "longestEventDispatchMs": 496.31,
+  "eventLatencyByType": {
+    "GESTURE_SCROLL_BEGIN": {
+      "count": 23,
+      "p50Ms": 15.78,
+      "p95Ms": 61.88,
+      "maxMs": 66.64
+    },
+    "FIRST_GESTURE_SCROLL_UPDATE": {
+      "count": 23,
+      "p50Ms": 31.56,
+      "p95Ms": 80.52,
+      "maxMs": 85.48
+    },
+    "MOUSE_WHEEL": {
+      "count": 36,
+      "p50Ms": 41.95,
+      "p95Ms": 100.31,
+      "maxMs": 130.15
+    },
+    "GESTURE_SCROLL_END": {
+      "count": 21,
+      "p50Ms": 47.83,
+      "p95Ms": 222.01,
+      "maxMs": 1481.25
+    },
+    "TOUCH_PRESSED": {
+      "count": 10,
+      "p50Ms": 18.92,
+      "p95Ms": 38.45,
+      "maxMs": 38.45
+    },
+    "GESTURE_TAP_DOWN": {
+      "count": 3,
+      "p50Ms": 31.92,
+      "p95Ms": 38.71,
+      "maxMs": 38.71
+    },
+    "TOUCH_MOVED": {
+      "count": 40,
+      "p50Ms": 56.4,
+      "p95Ms": 140.87,
+      "maxMs": 162.96
+    },
+    "GESTURE_TAP_CANCEL": {
+      "count": 3,
+      "p50Ms": 69.05,
+      "p95Ms": 69.4,
+      "maxMs": 69.4
+    },
+    "GESTURE_SCROLL_UPDATE": {
+      "count": 35,
+      "p50Ms": 24.94,
+      "p95Ms": 108.96,
+      "maxMs": 131.32
+    },
+    "TOUCH_RELEASED": {
+      "count": 5,
+      "p50Ms": 20.14,
+      "p95Ms": 31.57,
+      "maxMs": 31.57
+    },
+    "INERTIAL_GESTURE_SCROLL_UPDATE": {
+      "count": 22,
+      "p50Ms": 11.42,
+      "p95Ms": 20.56,
+      "maxMs": 21.3
+    },
+    "INERTIAL_GESTURE_SCROLL_END": {
+      "count": 2,
+      "p50Ms": 60.57,
+      "p95Ms": 60.57,
+      "maxMs": 60.57
+    },
+    "KEY_RELEASED": {
+      "count": 18,
+      "p50Ms": 1.2,
+      "p95Ms": 96.89,
+      "maxMs": 96.89
+    },
+    "KEY_PRESSED": {
+      "count": 18,
+      "p50Ms": 43.11,
+      "p95Ms": 597.62,
+      "maxMs": 597.62
+    }
+  },
+  "gestureCatchUp": {
+    "wheel": [
+      {
+        "afterInputMs": 0,
+        "scrollY": 1620
+      },
+      {
+        "afterInputMs": 100,
+        "scrollY": 1620
+      },
+      {
+        "afterInputMs": 300,
+        "scrollY": 1620
+      },
+      {
+        "afterInputMs": 600,
+        "scrollY": 1620
+      },
+      {
+        "afterInputMs": 1200,
+        "scrollY": 1620
+      }
+    ],
+    "touch": [
+      {
+        "afterInputMs": 0,
+        "scrollY": 2605
+      },
+      {
+        "afterInputMs": 100,
+        "scrollY": 2605
+      },
+      {
+        "afterInputMs": 300,
+        "scrollY": 2605
+      },
+      {
+        "afterInputMs": 600,
+        "scrollY": 2605
+      },
+      {
+        "afterInputMs": 1200,
+        "scrollY": 2605
+      }
+    ],
+    "keyboard": [
+      {
+        "afterInputMs": 0,
+        "scrollY": 694
+      },
+      {
+        "afterInputMs": 100,
+        "scrollY": 720
+      },
+      {
+        "afterInputMs": 300,
+        "scrollY": 720
+      },
+      {
+        "afterInputMs": 600,
+        "scrollY": 720
+      },
+      {
+        "afterInputMs": 1200,
+        "scrollY": 720
+      }
+    ]
+  }
+}
