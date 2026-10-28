@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import Lenis from "lenis";
 import {
   getFrameUrl,
   getSharedFrames,
@@ -188,7 +187,6 @@ export function CinematicExperience() {
   const ctx2dRef = useRef<CanvasRenderingContext2D | null>(null);
   const scrollTriggerRef = useRef<ScrollTrigger | null>(null);
   const masterTimelineRef = useRef<gsap.core.Timeline | null>(null);
-  const lenisRef = useRef<Lenis | null>(null);
 
   // Atmospheric overlay refs
   const heroBlackCurtainRef = useRef<HTMLDivElement | null>(null);
@@ -360,15 +358,10 @@ export function CinematicExperience() {
       const anchor = SECTION_SCROLL_ANCHORS[section];
       const tl = masterTimelineRef.current;
       const st = scrollTriggerRef.current;
-      const lenis = lenisRef.current;
 
       if (!st) {
         if (tl) tl.progress(anchor);
-        if (lenis) {
-          lenis.scrollTo(0, { immediate: instant });
-        } else {
-          window.scrollTo({ top: 0, behavior: instant ? "instant" : "smooth" });
-        }
+        window.scrollTo({ top: 0, behavior: instant ? "instant" : "smooth" });
         return;
       }
 
@@ -386,18 +379,10 @@ export function CinematicExperience() {
       }
 
       const targetScrollY = st.start + (st.end - st.start) * anchor;
-      if (lenis) {
-        lenis.scrollTo(targetScrollY, {
-          duration: instant ? 0 : 0.9,
-          immediate: instant,
-          lock: false,
-        });
-      } else {
-        window.scrollTo({
-          top: targetScrollY,
-          behavior: instant ? "instant" : "smooth",
-        });
-      }
+      window.scrollTo({
+        top: targetScrollY,
+        behavior: instant ? "instant" : "smooth",
+      });
       if (instant) {
         ScrollTrigger.update();
       }
@@ -658,6 +643,7 @@ export function CinematicExperience() {
     let activeWorkers = 0;
     let isActivelyScrolling = false;
     let scrollIdleTimer: ReturnType<typeof setTimeout> | null = null;
+    let backgroundLoaderDelayTimer: ReturnType<typeof setTimeout> | null = null;
 
     const getEffectiveConcurrency = (): number => {
       // While actively scrolling, pause spawning image decodes so 100% of CPU and GPU
@@ -733,35 +719,6 @@ export function CinematicExperience() {
     };
 
     gsap.registerPlugin(ScrollTrigger);
-    gsap.ticker.lagSmoothing(0);
-
-    const isMobile = capabilities.isMobile;
-    const lenis = new Lenis({
-      duration: isMobile ? 0.35 : 0.55,
-      easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      orientation: "vertical",
-      gestureOrientation: "vertical",
-      smoothWheel: true,
-      wheelMultiplier: 1.05,
-      touchMultiplier: 1.0,
-      syncTouch: false,
-      autoResize: true,
-    });
-    lenis.on("scroll", ScrollTrigger.update);
-    lenisRef.current = lenis;
-
-    const tickerCallback = (time: number) => {
-      lenisRef.current?.raf(time * 1000);
-      const target = pendingDrawFrameRef.current;
-      if (lastDrawnFrameRef.current !== target) {
-        renderFrameNow(target);
-      }
-    };
-    gsap.ticker.add(tickerCallback);
-
-    if (!hasSessionPreloadCompleted()) {
-      lenis.stop();
-    }
 
     const gsapCtx = gsap.context(() => {}, wrapper);
 
@@ -792,8 +749,8 @@ export function CinematicExperience() {
           start: "top top",
           end: () => `+=${Math.round(window.innerHeight * 8.0)}`,
           pin: true,
-          // With Lenis smoothly interpolating wheel and touch inputs, scrub: true
-          // locks the timeline and canvas 1:1 to the smooth scroll position without lag
+          // Native scrolling remains the source of truth; scrub keeps the visual
+          // timeline locked 1:1 to the browser's current scroll position.
           scrub: true,
           fastScrollEnd: true,
           anticipatePin: 1,
@@ -810,6 +767,7 @@ export function CinematicExperience() {
             );
             targetFrameRef.current = targetFrame;
             pendingDrawFrameRef.current = targetFrame;
+            scheduleFrameDraw(targetFrame);
 
             // Direct DOM update for right-edge progress bar (zero React re-renders)
             if (progressFillRef.current) {
@@ -1361,25 +1319,27 @@ export function CinematicExperience() {
 
     prepareForReveal();
 
-    const onPreloaderStart = () => {
-      lenisRef.current?.stop();
-    };
-
     const onPreloaderComplete = () => {
-      lenisRef.current?.start();
-      wakeLoadersRef.current?.();
       scheduleFrameDraw(targetFrameRef.current, true);
       ScrollTrigger.refresh();
+      // Keep the entry transition and the user's first gesture free from
+      // noncritical image decodes. Remaining frames resume once the browser has
+      // had a quiet window after the reveal.
+      backgroundLoaderDelayTimer = setTimeout(() => {
+        backgroundLoaderDelayTimer = null;
+        wakeLoadersRef.current?.();
+      }, 1800);
     };
 
-    window.addEventListener("visynth:preloader-start", onPreloaderStart);
     window.addEventListener("visynth:preloader-complete", onPreloaderComplete);
 
     if (hasSessionPreloadCompleted()) {
-      lenisRef.current?.start();
-      wakeLoadersRef.current?.();
       scheduleFrameDraw(targetFrameRef.current, true);
       ScrollTrigger.refresh();
+      backgroundLoaderDelayTimer = setTimeout(() => {
+        backgroundLoaderDelayTimer = null;
+        wakeLoadersRef.current?.();
+      }, 800);
     }
 
     return () => {
@@ -1387,6 +1347,9 @@ export function CinematicExperience() {
       wakeLoadersRef.current = null;
       if (scrollIdleTimer !== null) {
         clearTimeout(scrollIdleTimer);
+      }
+      if (backgroundLoaderDelayTimer !== null) {
+        clearTimeout(backgroundLoaderDelayTimer);
       }
       if (resizeRafId !== null) {
         window.cancelAnimationFrame(resizeRafId);
@@ -1397,14 +1360,10 @@ export function CinematicExperience() {
       }
       window.removeEventListener("resize", onWindowResize);
       window.removeEventListener("hashchange", onHashChange);
-      window.removeEventListener("visynth:preloader-start", onPreloaderStart);
       window.removeEventListener(
         "visynth:preloader-complete",
         onPreloaderComplete
       );
-      gsap.ticker.remove(tickerCallback);
-      lenisRef.current?.destroy();
-      lenisRef.current = null;
       if (scrollTriggerRef.current) scrollTriggerRef.current.kill();
       gsapCtx?.revert();
     };

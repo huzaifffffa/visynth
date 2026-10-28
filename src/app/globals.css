@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "lenis/dist/lenis.css";
 
 :root {
   --background: #000000;
@@ -16,7 +15,7 @@ html {
   background-color: #000000;
   color: #ffffff;
   color-scheme: dark;
-  overscroll-behavior-y: none;
+  touch-action: pan-y pinch-zoom;
 }
 
 html:not(.visynth-preloaded):has([data-testid="site-preloader"]:not([data-exiting="true"])),
@@ -35,7 +34,7 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
-  overscroll-behavior-y: none;
+  touch-action: pan-y pinch-zoom;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

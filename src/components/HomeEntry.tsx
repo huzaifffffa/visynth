@@ -46,10 +46,7 @@ export function HomeEntry() {
     };
 
     const isRepeat =
-      typeof window !== "undefined" &&
-      (window.sessionStorage.getItem("visynth_seen_v4") === "true" ||
-        document.documentElement.classList.contains("visynth-preloaded") ||
-        hasSessionPreloadCompleted());
+      typeof window !== "undefined" && hasSessionPreloadCompleted();
 
     if (isRepeat) {
       activateExperience();

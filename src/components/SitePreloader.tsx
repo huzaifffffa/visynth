@@ -9,441 +9,451 @@ import {
   preloadSiteAssets,
   waitForRevealReady,
 } from "@/lib/preloadSiteAssets";
+import type { PreloadProgress } from "@/lib/preloadSiteAssets";
 
-const SESSION_STORAGE_KEY = "visynth_seen_v4";
+const TEAM = [
+  { name: "Huzaifa Manzoor", role: "Chief Head" },
+  { name: "Muhammad Anas", role: "Creative Head" },
+  { name: "Shayan Khan", role: "Marketing Head" },
+  { name: "Fuzail Aijaz", role: "Sales Head" },
+] as const;
 
-/**
- * VISYNTH Cinematic Preloader: "FROM IDEA TO FORM"
- *
- * Storyboard:
- * - Frame 01: "01 / THE IDEA" — An architectural inception line and clean typographic proposition.
- * - Frame 02: "02 / TAKING SHAPE" — Geometric framing and directional typographic transformation.
- * - Frame 03: "03 / THE IDENTITY" — Confident resolution into the VISYNTH wordmark climax.
- * - Frame 04: "THE REVEAL" — Restrained editorial curtain reveal seamlessly unveiling the hero.
- */
+const INITIAL_PROGRESS: PreloadProgress = {
+  phase: "initializing",
+  completedFramesCount: 0,
+  loadedFramesCount: 0,
+  failedFramesCount: 0,
+  totalFramesCount: 0,
+  ratio: 0.04,
+};
+
+function getLoadingMessage(progress: PreloadProgress): string {
+  if (progress.phase === "initializing") return "Calibrating type and color";
+  if (progress.phase === "frames" && progress.totalFramesCount > 0) {
+    return `Decoding scene ${progress.completedFramesCount} of ${progress.totalFramesCount}`;
+  }
+  if (progress.phase === "experience") return "Assembling the first movement";
+  return "Experience ready";
+}
+
 export function SitePreloader() {
-  const [isUnmounted, setIsUnmounted] = useState<boolean>(false);
-
+  const [isUnmounted, setIsUnmounted] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
+  const [loadProgress, setLoadProgress] =
+    useState<PreloadProgress>(INITIAL_PROGRESS);
 
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const curtainRef = useRef<HTMLDivElement | null>(null);
-  const stageRef = useRef<HTMLDivElement | null>(null);
-
-  // Frame elements
-  const frame01Ref = useRef<HTMLDivElement | null>(null);
-  const frame01LineRef = useRef<HTMLDivElement | null>(null);
-
-  const frame02Ref = useRef<HTMLDivElement | null>(null);
-  const frame02LineRef = useRef<HTMLDivElement | null>(null);
-
-  const frame03Ref = useRef<HTMLDivElement | null>(null);
-  const logoImgRef = useRef<HTMLDivElement | null>(null);
-  const logoSublineRef = useRef<HTMLDivElement | null>(null);
-
-  const exitDividerRef = useRef<HTMLDivElement | null>(null);
-  const skipHandlerRef = useRef<(() => void) | null>(null);
+  const storyStageRef = useRef<HTMLDivElement | null>(null);
+  const actOneRef = useRef<HTMLDivElement | null>(null);
+  const teamRef = useRef<HTMLDivElement | null>(null);
+  const finalRef = useRef<HTMLDivElement | null>(null);
+  const progressLineRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const isRepeatVisit =
-      typeof window !== "undefined" &&
-      (window.sessionStorage.getItem(SESSION_STORAGE_KEY) === "true" ||
-        document.documentElement.classList.contains("visynth-preloaded") ||
-        hasSessionPreloadCompleted());
-
-    // If already visited this session, unlock instantly
-    if (isUnmounted || isRepeatVisit) {
-      markSessionPreloadCompleted();
+    if (hasSessionPreloadCompleted()) {
       document.body.style.overflow = "";
       document.body.style.overscrollBehavior = "";
-      setIsUnmounted(true);
+      queueMicrotask(() => setIsUnmounted(true));
       window.dispatchEvent(new CustomEvent("visynth:preloader-exit-start"));
       window.dispatchEvent(new CustomEvent("visynth:preloader-complete"));
       return;
     }
 
-    let isDisposed = false;
     const root = rootRef.current;
-    if (!root) return;
+    const storyStage = storyStageRef.current;
+    const actOne = actOneRef.current;
+    const team = teamRef.current;
+    const final = finalRef.current;
+    if (!root || !storyStage || !actOne || !team || !final) return;
 
-    // Lock page scrolling while preloader is active
+    let isDisposed = false;
+    let exitStarted = false;
+    let storyResolved = false;
+    let resolveStory: () => void = () => {};
+    const storyPromise = new Promise<void>((resolve) => {
+      resolveStory = () => {
+        if (storyResolved) return;
+        storyResolved = true;
+        resolve();
+      };
+    });
+
     const originalOverflow = document.body.style.overflow;
     const originalOverscroll = document.body.style.overscrollBehavior;
+    const originalScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     document.body.style.overflow = "hidden";
     document.body.style.overscrollBehavior = "none";
 
     const unlock = () => {
       document.body.style.overflow = originalOverflow || "";
       document.body.style.overscrollBehavior = originalOverscroll || "";
+      window.history.scrollRestoration = originalScrollRestoration;
     };
 
     const prefersReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
-    // Preload site assets in parallel
     const assetController = preloadSiteAssets({
       pathname: window.location.pathname,
       prefersReducedMotion,
+      safetyTimeoutMs: 20000,
+      onProgress: (progress) => {
+        if (!isDisposed) setLoadProgress(progress);
+      },
     });
 
-    // Dispatch lifecycle start event
     window.dispatchEvent(new CustomEvent("visynth:preloader-start"));
 
-    let masterTl: gsap.core.Timeline | null = null;
+    let masterTimeline: gsap.core.Timeline | null = null;
+    let exitTimeline: gsap.core.Timeline | null = null;
+
+    const finishExit = () => {
+      if (isDisposed) return;
+      markSessionPreloadCompleted();
+      unlock();
+      setIsUnmounted(true);
+      window.dispatchEvent(new CustomEvent("visynth:preloader-complete"));
+    };
 
     const triggerExit = async () => {
-      if (isDisposed) return;
+      if (isDisposed || exitStarted) return;
+      exitStarted = true;
       setIsExiting(true);
       root.setAttribute("data-exiting", "true");
-
       window.dispatchEvent(new CustomEvent("visynth:preloader-exit-start"));
 
-      // Fast check for hero readiness
-      await waitForRevealReady(120);
-
-      try {
-        window.sessionStorage.setItem(SESSION_STORAGE_KEY, "true");
-      } catch {}
-      markSessionPreloadCompleted();
+      await waitForRevealReady(1200);
+      if (isDisposed) return;
 
       if (prefersReducedMotion) {
-        gsap.to(root, {
-          opacity: 0,
-          duration: 0.2,
-          ease: "power1.out",
-          onComplete: () => {
-            unlock();
-            setIsUnmounted(true);
-            window.dispatchEvent(new CustomEvent("visynth:preloader-complete"));
-          },
-        });
+        finishExit();
         return;
       }
 
-      // Frame 04: The Reveal — Editorial curtain lift with horizontal crimson sweep
-      const exitTl = gsap.timeline({
-        onComplete: () => {
-          unlock();
-          setIsUnmounted(true);
-          window.dispatchEvent(new CustomEvent("visynth:preloader-complete"));
-        },
-      });
-
-      if (exitDividerRef.current) {
-        exitTl.fromTo(
-          exitDividerRef.current,
-          { scaleX: 0, opacity: 0 },
-          { scaleX: 1, opacity: 1, duration: 0.2, ease: "power3.inOut" }
-        );
-      }
-
-      if (curtainRef.current) {
-        exitTl.to(
-          curtainRef.current,
+      exitTimeline = gsap.timeline({ onComplete: finishExit });
+      exitTimeline
+        .to(progressLineRef.current, {
+          scaleX: 1,
+          duration: 0.36,
+          ease: "power3.inOut",
+        })
+        .to(
+          storyStage,
           {
-            clipPath: "inset(0% 0% 100% 0%)",
+            opacity: 0,
+            y: -10,
             duration: 0.32,
+            ease: "power2.in",
+          },
+          "-=0.18"
+        )
+        .to(
+          root,
+          {
+            clipPath: "inset(50% 0% 50% 0%)",
+            duration: 0.78,
             ease: "power4.inOut",
           },
-          "-=0.1"
+          "-=0.05"
         );
-      }
-
-      exitTl.to(
-        root,
-        {
-          opacity: 0,
-          duration: 0.15,
-          ease: "none",
-        },
-        "-=0.1"
-      );
     };
 
-    skipHandlerRef.current = () => {
-      if (masterTl) {
-        masterTl.kill();
-      }
-      triggerExit();
-    };
-
-    // Keyboard shortcut (Escape skips intro)
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        skipHandlerRef.current?.();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
+    const storyFallbackTimer = window.setTimeout(resolveStory, 9000);
 
     if (prefersReducedMotion) {
-      // Reduced motion: immediate resolution
-      gsap.set(frame01Ref.current, { display: "none" });
-      gsap.set(frame02Ref.current, { display: "none" });
-      gsap.set(frame03Ref.current, { opacity: 1, display: "flex" });
-      setTimeout(triggerExit, 250);
-      return;
+      gsap.set(actOne, { display: "none" });
+      gsap.set(team, { display: "none" });
+      gsap.set(final, { opacity: 1, display: "flex" });
+      window.setTimeout(resolveStory, 900);
+    } else {
+      const creditRows = team.querySelectorAll("[data-credit-row]");
+      const actOneLines = actOne.querySelectorAll("[data-story-line]");
+      const finalElements = final.querySelectorAll("[data-final-element]");
+
+      gsap.set(team, { autoAlpha: 0 });
+      gsap.set(final, { autoAlpha: 0 });
+      gsap.set(actOneLines, { yPercent: 115, opacity: 0 });
+      gsap.set(creditRows, { y: 18, opacity: 0 });
+      gsap.set(finalElements, { y: 16, opacity: 0 });
+
+      masterTimeline = gsap.timeline({
+        defaults: { ease: "power3.out" },
+        onComplete: resolveStory,
+      });
+
+      masterTimeline
+        .fromTo(
+          "[data-preloader-chrome]",
+          { opacity: 0 },
+          { opacity: 1, duration: 0.55, stagger: 0.06 },
+          0
+        )
+        .to(
+          actOneLines,
+          {
+            yPercent: 0,
+            opacity: 1,
+            duration: 0.72,
+            stagger: 0.12,
+            ease: "expo.out",
+          },
+          0.35
+        )
+        .to(actOne, { autoAlpha: 0, y: -12, duration: 0.5 }, 1.85)
+        .to(team, { autoAlpha: 1, duration: 0.35 }, 2.15)
+        .to(
+          creditRows,
+          {
+            y: 0,
+            opacity: 1,
+            duration: 0.58,
+            stagger: 0.22,
+            ease: "expo.out",
+          },
+          2.28
+        )
+        .to(team, { autoAlpha: 0, y: -10, duration: 0.48 }, 4.78)
+        .to(final, { autoAlpha: 1, duration: 0.34 }, 5.02)
+        .to(
+          finalElements,
+          {
+            y: 0,
+            opacity: 1,
+            duration: 0.65,
+            stagger: 0.12,
+            ease: "expo.out",
+          },
+          5.12
+        )
+        .to({}, { duration: 1.05 });
     }
 
-    // =========================================================================
-    // The "FROM IDEA TO FORM" Choreography Timeline (~0.95s total)
-    // =========================================================================
-    masterTl = gsap.timeline({
-      defaults: { ease: "power3.out" },
-      onComplete: triggerExit,
-    });
-
-    // FRAME 01 — THE IDEA (0.0s -> 0.3s)
-    masterTl
-      .fromTo(
-        frame01Ref.current,
-        { opacity: 0, y: 10 },
-        { opacity: 1, y: 0, duration: 0.18 }
-      )
-      .fromTo(
-        frame01LineRef.current,
-        { scaleX: 0 },
-        { scaleX: 1, duration: 0.22, ease: "power2.inOut" },
-        "-=0.14"
-      )
-      .to(
-        frame01Ref.current,
-        { opacity: 0, y: -6, duration: 0.14, ease: "power2.in" },
-        "+=0.08"
-      )
-
-      // FRAME 02 — THE TRANSFORMATION / TAKING SHAPE (0.3s -> 0.62s)
-      .fromTo(
-        frame02Ref.current,
-        { opacity: 0, y: 10 },
-        { opacity: 1, y: 0, duration: 0.18 }
-      )
-      .fromTo(
-        frame02LineRef.current,
-        { scaleX: 0 },
-        { scaleX: 1, duration: 0.22, ease: "power2.inOut" },
-        "-=0.14"
-      )
-      .to(
-        frame02Ref.current,
-        { opacity: 0, y: -6, duration: 0.14, ease: "power2.in" },
-        "+=0.08"
-      )
-
-      // FRAME 03 — THE IDENTITY: VISYNTH (0.62s -> 0.95s)
-      .fromTo(
-        frame03Ref.current,
-        { opacity: 0 },
-        { opacity: 1, duration: 0.14 }
-      )
-      .fromTo(
-        logoImgRef.current,
-        { opacity: 0, scale: 0.95, y: 8 },
-        { opacity: 1, scale: 1, y: 0, duration: 0.24, ease: "back.out(1.2)" },
-        "-=0.08"
-      )
-      .fromTo(
-        logoSublineRef.current,
-        { opacity: 0, y: 4 },
-        { opacity: 1, y: 0, duration: 0.16 },
-        "-=0.12"
-      )
-      // Concise climax hold
-      .to({}, { duration: 0.16 });
-
-    // Safety timeout: never hold users on loading screen longer than 3.2s
-    const safetyTimer = setTimeout(() => {
-      if (!isDisposed && !root.getAttribute("data-exiting")) {
-        triggerExit();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        [
+          " ",
+          "ArrowDown",
+          "ArrowUp",
+          "PageDown",
+          "PageUp",
+          "Home",
+          "End",
+        ].includes(event.key)
+      ) {
+        event.preventDefault();
       }
-    }, 3200);
+      if (event.key === "Escape" && masterTimeline) {
+        masterTimeline.progress(1, false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+
+    Promise.all([assetController.promise, storyPromise]).then(([result]) => {
+      if (isDisposed) return;
+      window.clearTimeout(storyFallbackTimer);
+      setLoadProgress((current) => ({
+        ...current,
+        phase: "ready",
+        ratio: 1,
+      }));
+      root.setAttribute(
+        "data-readiness",
+        result.timedOut ? "safe-fallback" : "ready"
+      );
+      void triggerExit();
+    });
 
     return () => {
       isDisposed = true;
-      clearTimeout(safetyTimer);
-      window.removeEventListener("keydown", onKeyDown);
-      masterTl?.kill();
+      window.clearTimeout(storyFallbackTimer);
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
+      masterTimeline?.kill();
+      exitTimeline?.kill();
       assetController.cancel();
       unlock();
     };
-  }, [isUnmounted]);
+  }, []);
 
-  if (isUnmounted) {
-    return null;
-  }
+  if (isUnmounted) return null;
+
+  const percentage = Math.round(loadProgress.ratio * 100);
+  const frameCounter =
+    loadProgress.totalFramesCount > 0
+      ? `${String(loadProgress.completedFramesCount).padStart(2, "0")} / ${String(loadProgress.totalFramesCount).padStart(2, "0")}`
+      : "-- / --";
 
   return (
     <div
       ref={rootRef}
       role="status"
       aria-live="polite"
+      aria-busy={!isExiting}
       aria-hidden={isExiting ? "true" : undefined}
       data-testid="site-preloader"
-      className={`fixed inset-0 z-[9999] w-screen h-[100dvh] min-h-screen overflow-hidden bg-[#050505] text-[#F5F5F5] select-none ${
+      className={`fixed inset-0 z-[9999] h-[100dvh] min-h-screen w-screen touch-none overflow-hidden bg-[#050505] text-[#f4f1eb] [clip-path:inset(0%_0%_0%_0%)] ${
         isExiting ? "pointer-events-none" : "pointer-events-auto"
       }`}
     >
-      {/* Screen Reader Announcement */}
-      <span className="sr-only">
-        VISYNTH — Creative Technology Studio. From idea to form.
-      </span>
-
-      {/* Main Masked Curtain Container for Clean Editorial Reveal */}
       <div
-        ref={curtainRef}
-        className="relative w-full h-full flex items-center justify-center [clip-path:inset(0%_0%_0%_0%)] will-change-[clip-path]"
+        aria-hidden="true"
+        className="absolute inset-0 opacity-50 [background-image:linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px)] [background-size:8vw_8vw]"
+      />
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-[radial-gradient(circle_at_72%_42%,rgba(199,20,32,0.10),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.015),transparent_32%)]"
+      />
+
+      <header
+        data-preloader-chrome
+        className="absolute inset-x-[clamp(22px,4.2vw,72px)] top-[clamp(22px,4vw,58px)] z-20 flex items-start justify-between border-t border-white/20 pt-3 text-[9px] font-medium uppercase tracking-[0.28em] text-white/55 sm:text-[10px]"
       >
-        {/* Subtle Architectural Corner Crosshairs & Fine Border Lines */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 pointer-events-none overflow-hidden"
+        <span>Visynth / Opening Titles</span>
+        <span className="text-right">
+          Production 001
+          <br />
+          Karachi — PK
+        </span>
+      </header>
+
+      <main
+        ref={storyStageRef}
+        className="relative z-10 flex h-full w-full items-center px-[clamp(22px,8vw,132px)] py-[clamp(100px,14vh,160px)]"
+      >
+        <section
+          ref={actOneRef}
+          aria-label="Opening statement"
+          className="absolute left-[clamp(22px,8vw,132px)] right-[clamp(22px,8vw,132px)] top-1/2 -translate-y-1/2"
         >
-          {/* Subtle Radial Crimson Atmospheric Glow */}
+          <p
+            data-story-line
+            className="mb-5 overflow-hidden text-[9px] font-medium uppercase tracking-[0.42em] text-[#e51c2a] sm:text-[10px]"
+          >
+            Act I — The Signal
+          </p>
+          <div className="overflow-hidden">
+            <p
+              data-story-line
+              className="max-w-[11ch] text-[clamp(42px,8.4vw,132px)] font-extralight uppercase leading-[0.84] tracking-[-0.065em]"
+            >
+              Every idea
+            </p>
+          </div>
+          <div className="overflow-hidden pl-[clamp(20px,10vw,170px)]">
+            <p
+              data-story-line
+              className="text-[clamp(42px,8.4vw,132px)] font-semibold uppercase leading-[0.84] tracking-[-0.065em]"
+            >
+              starts as a signal.
+            </p>
+          </div>
+        </section>
+
+        <section
+          ref={teamRef}
+          aria-label="VISYNTH team"
+          className="absolute left-[clamp(22px,8vw,132px)] right-[clamp(22px,8vw,132px)] top-1/2 -translate-y-1/2"
+        >
+          <div className="mb-[clamp(24px,5vh,54px)] flex items-end justify-between gap-6">
+            <div>
+              <p className="mb-3 text-[9px] font-medium uppercase tracking-[0.42em] text-[#e51c2a] sm:text-[10px]">
+                Act II — The Collective
+              </p>
+              <h2 className="text-[clamp(34px,5.5vw,78px)] font-light uppercase leading-none tracking-[-0.055em]">
+                Four disciplines.
+                <br />
+                One direction.
+              </h2>
+            </div>
+            <span className="hidden pb-1 text-[9px] uppercase tracking-[0.3em] text-white/35 md:block">
+              Studio Credits / 2026
+            </span>
+          </div>
+
+          <div className="border-t border-white/25">
+            {TEAM.map((member, index) => (
+              <div
+                key={member.name}
+                data-credit-row
+                className="grid grid-cols-[32px_1fr] gap-3 border-b border-white/12 py-[clamp(10px,1.45vh,17px)] sm:grid-cols-[48px_1.35fr_1fr] sm:items-center"
+              >
+                <span className="text-[9px] font-medium tracking-[0.24em] text-[#e51c2a]">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span className="text-[clamp(15px,1.6vw,24px)] font-medium uppercase tracking-[-0.015em]">
+                  {member.name}
+                </span>
+                <span className="col-start-2 text-[9px] uppercase tracking-[0.25em] text-white/45 sm:col-start-auto sm:text-right sm:text-[10px]">
+                  {member.role}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section
+          ref={finalRef}
+          aria-label="VISYNTH identity"
+          className="invisible absolute inset-x-[clamp(22px,8vw,132px)] top-1/2 flex -translate-y-1/2 flex-col items-center text-center"
+        >
+          <p
+            data-final-element
+            className="mb-[clamp(22px,4vh,42px)] text-[9px] font-medium uppercase tracking-[0.42em] text-[#e51c2a] sm:text-[10px]"
+          >
+            Act III — The Form
+          </p>
           <div
-            className="absolute inset-0 w-full h-full"
-            style={{
-              background:
-                "radial-gradient(circle at 50% 50%, rgba(230, 30, 30, 0.12) 0%, rgba(5, 5, 5, 0.95) 60%, #050505 100%)",
-            }}
+            data-final-element
+            className="relative h-[clamp(42px,8vw,102px)] w-[min(78vw,880px)]"
+          >
+            <Image
+              src="/visynth-wordmark.png"
+              alt="VISYNTH"
+              fill
+              priority
+              sizes="(max-width: 768px) 78vw, 880px"
+              className="object-contain"
+            />
+          </div>
+          <p
+            data-final-element
+            className="mt-[clamp(22px,4vh,40px)] text-[10px] font-light uppercase tracking-[0.38em] text-white/55 sm:text-[12px]"
+          >
+            Where vision becomes growth
+          </p>
+        </section>
+      </main>
+
+      <footer
+        data-preloader-chrome
+        className="absolute inset-x-[clamp(22px,4.2vw,72px)] bottom-[clamp(20px,3.8vw,54px)] z-20"
+      >
+        <div className="mb-3 flex items-end justify-between gap-4 text-[9px] uppercase tracking-[0.24em] sm:text-[10px]">
+          <div>
+            <p className="text-white/75">{getLoadingMessage(loadProgress)}</p>
+            <p className="mt-1 text-white/30">Frame cache {frameCounter}</p>
+          </div>
+          <span className="font-medium tabular-nums text-white/80">
+            {String(percentage).padStart(3, "0")}%
+          </span>
+        </div>
+        <div
+          role="progressbar"
+          aria-label="Loading VISYNTH experience"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percentage}
+          className="relative h-px w-full overflow-hidden bg-white/15"
+        >
+          <div
+            ref={progressLineRef}
+            className="absolute inset-y-0 left-0 w-full origin-left bg-[#e51c2a] transition-transform duration-300 ease-out"
+            style={{ transform: `scaleX(${loadProgress.ratio})` }}
           />
-          {/* Architectural Perimeter Frame Lines */}
-          <div className="absolute top-[6vh] inset-x-[6vw] h-[1px] bg-white/[0.07]" />
-          <div className="absolute bottom-[6vh] inset-x-[6vw] h-[1px] bg-white/[0.07]" />
-          <div className="absolute left-[6vw] inset-y-[6vh] w-[1px] bg-white/[0.07]" />
-          <div className="absolute right-[6vw] inset-y-[6vh] w-[1px] bg-white/[0.07]" />
-
-          {/* Corner Crosshairs */}
-          <span className="absolute top-[5.2vh] left-[5.4vw] text-[10px] font-mono text-white/30">
-            +
-          </span>
-          <span className="absolute top-[5.2vh] right-[5.4vw] text-[10px] font-mono text-white/30">
-            +
-          </span>
-          <span className="absolute bottom-[5.2vh] left-[5.4vw] text-[10px] font-mono text-white/30">
-            +
-          </span>
-          <span className="absolute bottom-[5.2vh] right-[5.4vw] text-[10px] font-mono text-white/30">
-            +
-          </span>
         </div>
-
-        {/* Central Stage Container */}
-        <div
-          ref={stageRef}
-          aria-hidden="true"
-          className="relative z-10 w-[calc(100vw-48px)] max-w-[680px] min-h-[220px] flex items-center justify-center text-center"
-        >
-          {/* ================================================================= */}
-          {/* FRAME 01 — THE IDEA                                               */}
-          {/* ================================================================= */}
-          <div
-            ref={frame01Ref}
-            className="absolute inset-0 flex flex-col items-center justify-center opacity-0 pointer-events-none"
-          >
-            <div className="flex items-center gap-2 mb-4">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#E61E1E] shadow-[0_0_8px_rgba(255,42,42,0.8)]" />
-              <span className="text-[10.5px] sm:text-xs font-mono tracking-[0.34em] uppercase text-white/50">
-                01 / THE IDEA
-              </span>
-            </div>
-
-            <p className="text-[clamp(20px,4.5vw,32px)] font-light tracking-[0.04em] uppercase text-[#F5F5F5] leading-tight">
-              THE INCEPTION OF VISION.
-            </p>
-
-            <div
-              ref={frame01LineRef}
-              className="mt-6 h-[1px] w-[110px] origin-center scale-x-0 bg-gradient-to-r from-transparent via-[#FF2A2A] to-transparent shadow-[0_0_10px_rgba(255,42,42,0.4)]"
-            />
-          </div>
-
-          {/* ================================================================= */}
-          {/* FRAME 02 — THE TRANSFORMATION / TAKING SHAPE                     */}
-          {/* ================================================================= */}
-          <div
-            ref={frame02Ref}
-            className="absolute inset-0 flex flex-col items-center justify-center opacity-0 pointer-events-none"
-          >
-            <div className="flex items-center gap-2 mb-4">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#E61E1E] shadow-[0_0_8px_rgba(255,42,42,0.8)]" />
-              <span className="text-[10.5px] sm:text-xs font-mono tracking-[0.34em] uppercase text-white/50">
-                02 / TAKING SHAPE
-              </span>
-            </div>
-
-            <p className="text-[clamp(20px,4.5vw,32px)] font-light tracking-[0.04em] uppercase text-[#F5F5F5] leading-tight">
-              PRECISION IN FORM AND MOTION.
-            </p>
-
-            <div
-              ref={frame02LineRef}
-              className="mt-6 h-[1px] w-[180px] origin-center scale-x-0 bg-gradient-to-r from-transparent via-[#FF2A2A] to-transparent shadow-[0_0_12px_rgba(255,42,42,0.5)]"
-            />
-          </div>
-
-          {/* ================================================================= */}
-          {/* FRAME 03 — THE IDENTITY: VISYNTH WORDMARK (CLIMAX)               */}
-          {/* ================================================================= */}
-          <div
-            ref={frame03Ref}
-            className="absolute inset-0 flex flex-col items-center justify-center opacity-0 pointer-events-none"
-          >
-            <div className="flex items-center gap-2 mb-5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#E61E1E] shadow-[0_0_8px_rgba(255,42,42,0.8)]" />
-              <span className="text-[10px] sm:text-[11px] font-mono tracking-[0.36em] uppercase text-white/60">
-                03 / CREATIVE TECHNOLOGY STUDIO
-              </span>
-            </div>
-
-            <div
-              ref={logoImgRef}
-              className="relative select-none pointer-events-none opacity-0 drop-shadow-[0_0_24px_rgba(255,42,42,0.32)]"
-            >
-              <Image
-                src="/visynth-logo.png"
-                alt="VISYNTH"
-                width={936}
-                height={130}
-                priority
-                fetchPriority="high"
-                sizes="(max-width: 768px) 180px, 240px"
-                className="w-[185px] sm:w-[230px] md:w-[260px] h-auto object-contain"
-              />
-            </div>
-
-            <div
-              ref={logoSublineRef}
-              className="mt-6 text-[10px] sm:text-xs font-mono tracking-[0.32em] uppercase text-white/60 opacity-0"
-            >
-              WHERE VISION BECOMES GROWTH
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom-Right Skip Button */}
-        <button
-          type="button"
-          onMouseEnter={() =>
-            window.dispatchEvent(new CustomEvent("visynth:preload-experience"))
-          }
-          onFocus={() =>
-            window.dispatchEvent(new CustomEvent("visynth:preload-experience"))
-          }
-          onClick={() => skipHandlerRef.current?.()}
-          data-testid="preloader-skip-button"
-          aria-label="Skip intro"
-          className="absolute bottom-6 right-6 md:bottom-10 md:right-[6vw] z-20 px-3 py-1.5 bg-transparent border-0 text-[10.5px] sm:text-xs font-mono tracking-[0.28em] uppercase text-[#F5F5F5] hover:text-[#FF2A2A] hover:[text-shadow:0_0_14px_rgba(255,42,42,0.9),0_0_28px_rgba(230,30,30,0.65)] focus-visible:outline-none focus-visible:text-[#FF2A2A] focus-visible:[text-shadow:0_0_14px_rgba(255,42,42,0.9)] transition-all duration-300 cursor-pointer"
-        >
-          SKIP
-        </button>
-
-        {/* Full-Screen Horizontal Crimson Exit Divider Line */}
-        <div
-          ref={exitDividerRef}
-          aria-hidden="true"
-          className="absolute left-0 right-0 top-0 h-[2px] w-full origin-center scale-x-0 opacity-0 bg-gradient-to-r from-transparent via-[#FF2A2A] to-transparent shadow-[0_0_18px_rgba(255,42,42,0.8)] pointer-events-none"
-        />
-      </div>
+      </footer>
     </div>
   );
 }

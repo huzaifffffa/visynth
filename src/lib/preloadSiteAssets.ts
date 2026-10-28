@@ -32,15 +32,10 @@ export function getSharedFrameStates(): Uint8Array {
 export function hasSessionPreloadCompleted(): boolean {
   if (hasCompletedSessionPreload) return true;
   if (typeof window !== "undefined") {
-    try {
-      if (
-        window.sessionStorage.getItem("visynth_seen_v4") === "true" ||
-        document.documentElement.classList.contains("visynth-preloaded")
-      ) {
-        hasCompletedSessionPreload = true;
-        return true;
-      }
-    } catch {}
+    if (document.documentElement.classList.contains("visynth-preloaded")) {
+      hasCompletedSessionPreload = true;
+      return true;
+    }
   }
   return false;
 }
@@ -48,10 +43,7 @@ export function hasSessionPreloadCompleted(): boolean {
 export function markSessionPreloadCompleted(): void {
   hasCompletedSessionPreload = true;
   if (typeof window !== "undefined") {
-    try {
-      window.sessionStorage.setItem("visynth_seen_v4", "true");
-      document.documentElement.classList.add("visynth-preloaded");
-    } catch {}
+    document.documentElement.classList.add("visynth-preloaded");
   }
 }
 
@@ -279,7 +271,7 @@ function buildInitialPreloadFrames(
   isSlowNetwork: boolean,
   isMobileViewport: boolean
 ): number[] {
-  if (prefersReducedMotion || isSlowNetwork || isMobileViewport) {
+  if (prefersReducedMotion) {
     return [...REDUCED_MOTION_KEYFRAMES];
   }
 
@@ -293,14 +285,30 @@ function buildInitialPreloadFrames(
     }
   };
 
-  // Frame 0 + Section anchor keyframes
+  // Frame 0 + section anchor keyframes
   push(0);
   for (const kf of REDUCED_MOTION_KEYFRAMES) push(kf);
 
-  // Opening hero scrub frames (lightweight set for mobile vs desktop)
-  const openingCount = isMobileViewport ? 6 : 14;
-  for (let i = 1; i <= openingCount; i++) {
-    push(i);
+  if (isSlowNetwork) {
+    // Preserve a responsive first gesture without holding constrained users for
+    // the full dense buffer. The progressive loader fills the gaps when idle.
+    for (let i = 4; i <= 28; i += 4) push(i);
+    return order;
+  }
+
+  // Decode a contiguous first-scroll buffer before entry. Mobile frames are
+  // smaller, but the touch path still needs enough frames to avoid competing
+  // with image decode during the first swipe.
+  const openingCount = isMobileViewport ? 28 : 42;
+  for (let i = 1; i <= openingCount; i++) push(i);
+
+  // Keep a small decoded neighborhood around later section anchors so fast
+  // navigation never lands on a single isolated frame.
+  const anchorRadius = isMobileViewport ? 1 : 2;
+  for (const anchor of REDUCED_MOTION_KEYFRAMES.slice(1)) {
+    for (let offset = -anchorRadius; offset <= anchorRadius; offset++) {
+      push(anchor + offset);
+    }
   }
 
   return order;
@@ -310,7 +318,17 @@ export interface PreloadControllerOptions {
   pathname: string;
   prefersReducedMotion: boolean;
   onFirstFrameLoaded?: (img: HTMLImageElement) => void;
+  onProgress?: (progress: PreloadProgress) => void;
   safetyTimeoutMs?: number;
+}
+
+export interface PreloadProgress {
+  phase: "initializing" | "frames" | "experience" | "ready";
+  completedFramesCount: number;
+  loadedFramesCount: number;
+  failedFramesCount: number;
+  totalFramesCount: number;
+  ratio: number;
 }
 
 export interface PreloadResult {
@@ -346,11 +364,42 @@ export function preloadSiteAssets(
     let resolved = false;
     let loadedFramesCount = 0;
     let failedFramesCount = 0;
+    let totalFramesCount = 0;
+    const completedFrameIndices = new Set<number>();
+
+    const emitProgress = (
+      phase: PreloadProgress["phase"],
+      ratioOverride?: number
+    ) => {
+      const completedFramesCount = completedFrameIndices.size;
+      const frameRatio =
+        totalFramesCount > 0 ? completedFramesCount / totalFramesCount : 0;
+      const ratio =
+        ratioOverride ??
+        (phase === "initializing"
+          ? 0.04
+          : phase === "frames"
+            ? 0.08 + frameRatio * 0.78
+            : phase === "experience"
+              ? 0.92
+              : 1);
+      options.onProgress?.({
+        phase,
+        completedFramesCount,
+        loadedFramesCount,
+        failedFramesCount,
+        totalFramesCount,
+        ratio: Math.min(1, Math.max(0, ratio)),
+      });
+    };
+
+    emitProgress("initializing");
 
     const finalize = (timedOut: boolean) => {
       if (resolved) return;
       resolved = true;
       assignFallbackFrames();
+      emitProgress(timedOut ? "experience" : "ready", timedOut ? 0.96 : 1);
       resolve({
         timedOut,
         loadedFramesCount,
@@ -402,6 +451,7 @@ export function preloadSiteAssets(
         await Promise.allSettled([fontsPromise, windowLoadPromise]);
         clearTimeout(safetyTimer);
         if (!isCancelled) {
+          emitProgress("ready", 1);
           finalize(false);
         }
         return;
@@ -410,16 +460,28 @@ export function preloadSiteAssets(
       const { isSlowNetwork, isMobileViewport, concurrency } =
         isConstrainedConnectionOrMobile();
 
+      const frameOrder = buildInitialPreloadFrames(
+        options.prefersReducedMotion,
+        isSlowNetwork,
+        isMobileViewport
+      );
+      totalFramesCount = frameOrder.length;
+      emitProgress("frames");
+
       // 3. First Hero Frame on Home Route
       const firstFramePromise = loadSequenceFrame(0, !isSlowNetwork).then(
         (img) => {
           if (img) {
             loadedFramesCount++;
+            completedFrameIndices.add(0);
+            emitProgress("frames");
             if (!isCancelled && options.onFirstFrameLoaded) {
               options.onFirstFrameLoaded(img);
             }
           } else {
             failedFramesCount++;
+            completedFrameIndices.add(0);
+            emitProgress("frames");
           }
           return img;
         }
@@ -433,11 +495,6 @@ export function preloadSiteAssets(
       }
 
       // 4. Controlled Concurrency Queue for Selective Initial Frames (yields between decodes to avoid main-thread long tasks)
-      const frameOrder = buildInitialPreloadFrames(
-        options.prefersReducedMotion,
-        isSlowNetwork,
-        isMobileViewport
-      );
       let cursor = 0;
 
       const runFrameWorker = async (): Promise<void> => {
@@ -447,6 +504,8 @@ export function preloadSiteAssets(
             sharedFrameStates[frameIdx] === FRAME_LOADED &&
             sharedImages[frameIdx]
           ) {
+            completedFrameIndices.add(frameIdx);
+            emitProgress("frames");
             continue;
           }
           // Yield briefly between decodes so main-thread tasks stay well under 50ms
@@ -458,6 +517,8 @@ export function preloadSiteAssets(
           } else {
             failedFramesCount++;
           }
+          completedFrameIndices.add(frameIdx);
+          emitProgress("frames");
         }
       };
 
@@ -475,6 +536,8 @@ export function preloadSiteAssets(
         windowLoadPromise,
         experiencePromise,
       ]);
+
+      emitProgress("experience", 0.96);
 
       clearTimeout(safetyTimer);
       if (!isCancelled) {
