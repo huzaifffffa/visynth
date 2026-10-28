@@ -608,16 +608,6 @@ export function CinematicExperience() {
             }
             imagesRef.current[frameIndex] = img;
             frameStates[frameIndex] = FRAME_LOADED;
-            // Keep decoded memory bounded while compressed frames remain in
-            // HTTP cache. Distant frames are decoded again only on demand.
-            for (let index = 0; index < TOTAL_FRAMES; index++) {
-              if (Math.abs(index - targetFrameRef.current) > 48 &&
-                  !REDUCED_MOTION_KEYFRAMES.includes(index) &&
-                  frameStates[index] === FRAME_LOADED) {
-                imagesRef.current[index] = null;
-                frameStates[index] = FRAME_UNLOADED;
-              }
-            }
 
             // Only schedule a canvas update if the canvas has not yet drawn the exact target frame
             // and this newly decoded frame is closer to targetFrame than what is currently drawn
@@ -658,7 +648,7 @@ export function CinematicExperience() {
     const getEffectiveConcurrency = (): number => {
       // While actively scrolling, pause spawning image decodes so 100% of CPU and GPU
       // render budget goes directly to locked 60fps scrolling and canvas presentation
-      if (isActivelyScrolling) return 0;
+      if (isActivelyScrolling) return 1;
       // Decode one frame at a time after entry to reduce competing image work
       // when a new gesture begins during background preparation.
       return 1;

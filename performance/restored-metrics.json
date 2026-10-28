@@ -1,0 +1,201 @@
+{
+  "label": "restored",
+  "url": "http://127.0.0.1:3103",
+  "traceEventCount": 223664,
+  "rendererTaskCount": 20300,
+  "rendererTaskP95Ms": 3.98,
+  "longTaskCount": 14,
+  "longestTaskMs": 226.31,
+  "animationFrameCount": 657,
+  "animationFrameP95Ms": 48.5,
+  "animationFramesOver20Ms": 267,
+  "animationFramesOver50Ms": 25,
+  "eventDispatchCount": 745,
+  "eventDispatchP95Ms": 1.12,
+  "longestEventDispatchMs": 6.27,
+  "eventLatencyByType": {
+    "GESTURE_SCROLL_BEGIN": {
+      "count": 23,
+      "p50Ms": 17.71,
+      "p95Ms": 60.76,
+      "maxMs": 79.23
+    },
+    "FIRST_GESTURE_SCROLL_UPDATE": {
+      "count": 23,
+      "p50Ms": 46.62,
+      "p95Ms": 106.55,
+      "maxMs": 112.6
+    },
+    "MOUSE_WHEEL": {
+      "count": 36,
+      "p50Ms": 53.72,
+      "p95Ms": 128.15,
+      "maxMs": 143.8
+    },
+    "GESTURE_SCROLL_END": {
+      "count": 21,
+      "p50Ms": 64.4,
+      "p95Ms": 220.67,
+      "maxMs": 1522.07
+    },
+    "TOUCH_PRESSED": {
+      "count": 10,
+      "p50Ms": 14.11,
+      "p95Ms": 60.19,
+      "maxMs": 60.19
+    },
+    "GESTURE_TAP_DOWN": {
+      "count": 3,
+      "p50Ms": 16.5,
+      "p95Ms": 58.6,
+      "maxMs": 58.6
+    },
+    "TOUCH_MOVED": {
+      "count": 40,
+      "p50Ms": 50.94,
+      "p95Ms": 98.65,
+      "maxMs": 103.63
+    },
+    "GESTURE_TAP_CANCEL": {
+      "count": 3,
+      "p50Ms": 52.09,
+      "p95Ms": 54.69,
+      "maxMs": 54.69
+    },
+    "GESTURE_SCROLL_UPDATE": {
+      "count": 35,
+      "p50Ms": 25.08,
+      "p95Ms": 44.67,
+      "maxMs": 59.2
+    },
+    "TOUCH_RELEASED": {
+      "count": 5,
+      "p50Ms": 24.04,
+      "p95Ms": 49.29,
+      "maxMs": 49.29
+    },
+    "INERTIAL_GESTURE_SCROLL_UPDATE": {
+      "count": 23,
+      "p50Ms": 19.79,
+      "p95Ms": 23.19,
+      "maxMs": 23.68
+    },
+    "INERTIAL_GESTURE_SCROLL_END": {
+      "count": 2,
+      "p50Ms": 89.5,
+      "p95Ms": 89.5,
+      "maxMs": 89.5
+    },
+    "KEY_RELEASED": {
+      "count": 18,
+      "p50Ms": 1.59,
+      "p95Ms": 22.84,
+      "maxMs": 22.84
+    },
+    "KEY_PRESSED": {
+      "count": 18,
+      "p50Ms": 22.39,
+      "p95Ms": 49.21,
+      "maxMs": 49.21
+    }
+  },
+  "gestureCatchUp": {
+    "wheel": [
+      {
+        "afterInputMs": 0,
+        "scrollY": 1620
+      },
+      {
+        "afterInputMs": 100,
+        "scrollY": 1620
+      },
+      {
+        "afterInputMs": 300,
+        "scrollY": 1620
+      },
+      {
+        "afterInputMs": 600,
+        "scrollY": 1620
+      },
+      {
+        "afterInputMs": 1200,
+        "scrollY": 1620
+      }
+    ],
+    "touch": [
+      {
+        "afterInputMs": 0,
+        "scrollY": 2625
+      },
+      {
+        "afterInputMs": 100,
+        "scrollY": 2625
+      },
+      {
+        "afterInputMs": 300,
+        "scrollY": 2625
+      },
+      {
+        "afterInputMs": 600,
+        "scrollY": 2625
+      },
+      {
+        "afterInputMs": 1200,
+        "scrollY": 2625
+      }
+    ],
+    "keyboard": [
+      {
+        "afterInputMs": 0,
+        "scrollY": 698
+      },
+      {
+        "afterInputMs": 100,
+        "scrollY": 720
+      },
+      {
+        "afterInputMs": 300,
+        "scrollY": 720
+      },
+      {
+        "afterInputMs": 600,
+        "scrollY": 720
+      },
+      {
+        "afterInputMs": 1200,
+        "scrollY": 720
+      }
+    ]
+  },
+  "preparedFrames": 300,
+  "canvasFrames": [
+    {
+      "progress": 0,
+      "signature": 2521150709
+    },
+    {
+      "progress": 0.25,
+      "signature": 3404578897
+    },
+    {
+      "progress": 0.5,
+      "signature": 1788867715
+    },
+    {
+      "progress": 0.75,
+      "signature": 3512089520
+    },
+    {
+      "progress": 1,
+      "signature": 1056446239
+    },
+    {
+      "progress": 0.5,
+      "signature": 1788867715
+    },
+    {
+      "progress": 0,
+      "signature": 2521150709
+    }
+  ]
+}

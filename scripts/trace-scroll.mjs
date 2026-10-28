@@ -323,6 +323,9 @@ async function main() {
   await client.send("Page.navigate", { url });
   await loaded;
   await waitForExperience(client);
+  const preparedFrames = await evaluate(client,
+    "Number(document.documentElement.dataset.visynthFramesReady || 0)");
+  console.log(JSON.stringify({ preparedFrames }));
 
   await client.send("Tracing.start", {
     categories: [
@@ -344,6 +347,26 @@ async function main() {
   gestureSamples.touch = await runTouch(client);
   await resetScroll(client);
   gestureSamples.keyboard = await runKeyboard(client);
+
+  // Check the actual rendered canvas across the full story, in both directions.
+  const canvasFrames = [];
+  const maxScroll = await evaluate(client, "document.scrollingElement.scrollHeight - innerHeight");
+  for (const progress of [0, 0.25, 0.5, 0.75, 1, 0.5, 0]) {
+    await evaluate(client, `window.scrollTo({top:${maxScroll * progress},behavior:'instant'})`);
+    await delay(150);
+    const signature = await evaluate(client, `(() => {
+      const canvas = document.querySelector('canvas');
+      const pixels = canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+      let hash = 2166136261;
+      for (let i=0;i<pixels.length;i+=1024) hash=Math.imul(hash ^ pixels[i],16777619);
+      return hash >>> 0;
+    })()`);
+    canvasFrames.push({progress,signature});
+  }
+  console.log(JSON.stringify({ canvasFrames }));
+  if (new Set(canvasFrames.map(frame => frame.signature)).size < 4) {
+    throw new Error("Canvas sequence did not advance across the story.");
+  }
 
   const tracingComplete = client.once("Tracing.tracingComplete");
   await client.send("Tracing.end");
@@ -368,6 +391,8 @@ async function main() {
     gzip.on("error", rejectGzip);
   });
   const metrics = summarizeTrace(trace, gestureSamples);
+  metrics.preparedFrames = preparedFrames;
+  metrics.canvasFrames = canvasFrames;
   writeFileSync(metricsPath, `${JSON.stringify(metrics, null, 2)}\n`);
   console.log(JSON.stringify({ tracePath, metricsPath, metrics }, null, 2));
 }

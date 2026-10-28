@@ -268,50 +268,14 @@ export function assignFallbackFrames(): void {
  */
 function buildInitialPreloadFrames(
   prefersReducedMotion: boolean,
-  isSlowNetwork: boolean,
-  isMobileViewport: boolean
 ): number[] {
   if (prefersReducedMotion) {
     return [...REDUCED_MOTION_KEYFRAMES];
   }
 
-  const seen = new Set<number>();
-  const order: number[] = [];
-
-  const push = (idx: number) => {
-    if (idx >= 0 && idx < TOTAL_SEQUENCE_FRAMES && !seen.has(idx)) {
-      seen.add(idx);
-      order.push(idx);
-    }
-  };
-
-  // Frame 0 + section anchor keyframes
-  push(0);
-  for (const kf of REDUCED_MOTION_KEYFRAMES) push(kf);
-
-  if (isSlowNetwork) {
-    // Preserve a responsive first gesture without holding constrained users for
-    // the full dense buffer. The progressive loader fills the gaps when idle.
-    for (let i = 4; i <= 28; i += 4) push(i);
-    return order;
-  }
-
-  // Decode a contiguous first-scroll buffer before entry. Mobile frames are
-  // smaller, but the touch path still needs enough frames to avoid competing
-  // with image decode during the first swipe.
-  const openingCount = isMobileViewport ? 28 : 42;
-  for (let i = 1; i <= openingCount; i++) push(i);
-
-  // Keep a small decoded neighborhood around later section anchors so fast
-  // navigation never lands on a single isolated frame.
-  const anchorRadius = isMobileViewport ? 1 : 2;
-  for (const anchor of REDUCED_MOTION_KEYFRAMES.slice(1)) {
-    for (let offset = -anchorRadius; offset <= anchorRadius; offset++) {
-      push(anchor + offset);
-    }
-  }
-
-  return order;
+  // Every scroll position must have its exact frame ready, including reverse
+  // and uninterrupted gestures. Downloading bytes alone is insufficient.
+  return Array.from({ length: TOTAL_SEQUENCE_FRAMES }, (_, index) => index);
 }
 
 export interface PreloadControllerOptions {
@@ -401,6 +365,9 @@ export function preloadSiteAssets(
       if (resolved) return;
       resolved = true;
       assignFallbackFrames();
+      document.documentElement.dataset.visynthFramesReady = String(
+        sharedImages.filter(Boolean).length
+      );
       emitProgress(timedOut ? "experience" : "ready", timedOut ? 0.96 : 1);
       resolve({
         timedOut,
@@ -457,13 +424,11 @@ export function preloadSiteAssets(
         return;
       }
 
-      const { isSlowNetwork, isMobileViewport, concurrency } =
+      const { isSlowNetwork, concurrency } =
         isConstrainedConnectionOrMobile();
 
       const frameOrder = buildInitialPreloadFrames(
-        options.prefersReducedMotion,
-        isSlowNetwork,
-        isMobileViewport
+        options.prefersReducedMotion
       );
       totalFramesCount = frameOrder.length;
       emitProgress("frames");
