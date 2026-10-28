@@ -9,7 +9,6 @@ import {
   preloadSiteAssets,
   waitForRevealReady,
 } from "@/lib/preloadSiteAssets";
-import type { PreloadProgress } from "@/lib/preloadSiteAssets";
 
 const TEAM = [
   { name: "Huzaifa Manzoor", role: "Chief Head" },
@@ -18,29 +17,9 @@ const TEAM = [
   { name: "Fuzail Aijaz", role: "Sales Head" },
 ] as const;
 
-const INITIAL_PROGRESS: PreloadProgress = {
-  phase: "initializing",
-  completedFramesCount: 0,
-  loadedFramesCount: 0,
-  failedFramesCount: 0,
-  totalFramesCount: 0,
-  ratio: 0.04,
-};
-
-function getLoadingMessage(progress: PreloadProgress): string {
-  if (progress.phase === "initializing") return "Calibrating type and color";
-  if (progress.phase === "frames" && progress.totalFramesCount > 0) {
-    return `Decoding scene ${progress.completedFramesCount} of ${progress.totalFramesCount}`;
-  }
-  if (progress.phase === "experience") return "Assembling the first movement";
-  return "Experience ready";
-}
-
 export function SitePreloader() {
   const [isUnmounted, setIsUnmounted] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
-  const [loadProgress, setLoadProgress] =
-    useState<PreloadProgress>(INITIAL_PROGRESS);
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const storyStageRef = useRef<HTMLDivElement | null>(null);
@@ -80,16 +59,12 @@ export function SitePreloader() {
 
     const originalOverflow = document.body.style.overflow;
     const originalOverscroll = document.body.style.overscrollBehavior;
-    const originalScrollRestoration = window.history.scrollRestoration;
-    window.history.scrollRestoration = "manual";
-    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     document.body.style.overflow = "hidden";
     document.body.style.overscrollBehavior = "none";
 
     const unlock = () => {
       document.body.style.overflow = originalOverflow || "";
       document.body.style.overscrollBehavior = originalOverscroll || "";
-      window.history.scrollRestoration = originalScrollRestoration;
     };
 
     const prefersReducedMotion = window.matchMedia(
@@ -99,10 +74,7 @@ export function SitePreloader() {
     const assetController = preloadSiteAssets({
       pathname: window.location.pathname,
       prefersReducedMotion,
-      safetyTimeoutMs: 20000,
-      onProgress: (progress) => {
-        if (!isDisposed) setLoadProgress(progress);
-      },
+      safetyTimeoutMs: 45000,
     });
 
     window.dispatchEvent(new CustomEvent("visynth:preloader-start"));
@@ -113,6 +85,7 @@ export function SitePreloader() {
     const finishExit = () => {
       if (isDisposed) return;
       markSessionPreloadCompleted();
+      try { window.sessionStorage.setItem("visynth_intro_seen", "true"); } catch {}
       unlock();
       setIsUnmounted(true);
       window.dispatchEvent(new CustomEvent("visynth:preloader-complete"));
@@ -125,7 +98,7 @@ export function SitePreloader() {
       root.setAttribute("data-exiting", "true");
       window.dispatchEvent(new CustomEvent("visynth:preloader-exit-start"));
 
-      await waitForRevealReady(1200);
+      await waitForRevealReady(100);
       if (isDisposed) return;
 
       if (prefersReducedMotion) {
@@ -161,12 +134,12 @@ export function SitePreloader() {
         );
     };
 
-    const storyFallbackTimer = window.setTimeout(resolveStory, 9000);
+    const storyFallbackTimer = window.setTimeout(resolveStory, 8000);
 
     if (prefersReducedMotion) {
       gsap.set(actOne, { display: "none" });
       gsap.set(team, { display: "none" });
-      gsap.set(final, { opacity: 1, display: "flex" });
+      gsap.set(final, { autoAlpha: 1, display: "flex" });
       window.setTimeout(resolveStory, 900);
     } else {
       const creditRows = team.querySelectorAll("[data-credit-row]");
@@ -183,6 +156,11 @@ export function SitePreloader() {
         defaults: { ease: "power3.out" },
         onComplete: resolveStory,
       });
+      try {
+        masterTimeline.timeScale(window.sessionStorage.getItem("visynth_intro_seen") === "true" ? 3 : 1);
+      } catch {
+        masterTimeline.timeScale(1);
+      }
 
       masterTimeline
         .fromTo(
@@ -254,11 +232,6 @@ export function SitePreloader() {
     Promise.all([assetController.promise, storyPromise]).then(([result]) => {
       if (isDisposed) return;
       window.clearTimeout(storyFallbackTimer);
-      setLoadProgress((current) => ({
-        ...current,
-        phase: "ready",
-        ratio: 1,
-      }));
       root.setAttribute(
         "data-readiness",
         result.timedOut ? "safe-fallback" : "ready"
@@ -278,12 +251,6 @@ export function SitePreloader() {
   }, []);
 
   if (isUnmounted) return null;
-
-  const percentage = Math.round(loadProgress.ratio * 100);
-  const frameCounter =
-    loadProgress.totalFramesCount > 0
-      ? `${String(loadProgress.completedFramesCount).padStart(2, "0")} / ${String(loadProgress.totalFramesCount).padStart(2, "0")}`
-      : "-- / --";
 
   return (
     <div
@@ -430,27 +397,12 @@ export function SitePreloader() {
         data-preloader-chrome
         className="absolute inset-x-[clamp(22px,4.2vw,72px)] bottom-[clamp(20px,3.8vw,54px)] z-20"
       >
-        <div className="mb-3 flex items-end justify-between gap-4 text-[9px] uppercase tracking-[0.24em] sm:text-[10px]">
-          <div>
-            <p className="text-white/75">{getLoadingMessage(loadProgress)}</p>
-            <p className="mt-1 text-white/30">Frame cache {frameCounter}</p>
-          </div>
-          <span className="font-medium tabular-nums text-white/80">
-            {String(percentage).padStart(3, "0")}%
-          </span>
-        </div>
-        <div
-          role="progressbar"
-          aria-label="Loading VISYNTH experience"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={percentage}
-          className="relative h-px w-full overflow-hidden bg-white/15"
-        >
+        <p className="mb-3 text-[10px] uppercase tracking-[0.24em] text-white/65">Preparing the experience</p>
+        <div className="relative h-px w-full overflow-hidden bg-white/15">
           <div
             ref={progressLineRef}
             className="absolute inset-y-0 left-0 w-full origin-left bg-[#e51c2a] transition-transform duration-300 ease-out"
-            style={{ transform: `scaleX(${loadProgress.ratio})` }}
+            style={{ transform: "scaleX(0.2)" }}
           />
         </div>
       </footer>

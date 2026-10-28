@@ -649,7 +649,9 @@ export function CinematicExperience() {
       // While actively scrolling, pause spawning image decodes so 100% of CPU and GPU
       // render budget goes directly to locked 60fps scrolling and canvas presentation
       if (isActivelyScrolling) return 0;
-      return capabilities.concurrency;
+      // Decode one frame at a time after entry to reduce competing image work
+      // when a new gesture begins during background preparation.
+      return 1;
     };
 
     const spawnWorker = () => {
@@ -1305,17 +1307,26 @@ export function CinematicExperience() {
           : loadSingleFrame(0, true);
 
       frame0Promise.then(() => {
-        if (!isCancelled) {
-          scheduleFrameDraw(targetFrameRef.current, true);
+        if (!isCancelled && imagesRef.current[0]) {
+          renderFrameNow(0);
+          window.requestAnimationFrame(() => {
+            if (!isCancelled) notifyRevealReady();
+          });
         }
       });
 
       startTimelineSetup();
       ScrollTrigger.refresh();
+    };
+
+    const onFirstFrameReady = () => {
+      if (isCancelled || !imagesRef.current[0]) return;
+      renderFrameNow(0);
       window.requestAnimationFrame(() => {
-        notifyRevealReady();
+        if (!isCancelled) notifyRevealReady();
       });
     };
+    window.addEventListener("visynth:first-frame-ready", onFirstFrameReady);
 
     prepareForReveal();
 
@@ -1360,6 +1371,7 @@ export function CinematicExperience() {
       }
       window.removeEventListener("resize", onWindowResize);
       window.removeEventListener("hashchange", onHashChange);
+      window.removeEventListener("visynth:first-frame-ready", onFirstFrameReady);
       window.removeEventListener(
         "visynth:preloader-complete",
         onPreloaderComplete

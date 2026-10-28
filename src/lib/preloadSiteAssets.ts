@@ -348,10 +348,12 @@ export function preloadSiteAssets(
   options: PreloadControllerOptions
 ): { promise: Promise<PreloadResult>; cancel: () => void } {
   let isCancelled = false;
+  const cacheAbort = new AbortController();
   const safetyTimeoutMs = options.safetyTimeoutMs ?? 15000;
 
   const cancel = () => {
     isCancelled = true;
+    cacheAbort.abort();
     // Reset any in-flight loading state back to unloaded so CinematicExperience can pick them up cleanly
     for (let i = 0; i < TOTAL_SEQUENCE_FRAMES; i++) {
       if (sharedFrameStates[i] === FRAME_LOADING && !sharedImages[i]) {
@@ -408,6 +410,7 @@ export function preloadSiteAssets(
     };
 
     const safetyTimer = setTimeout(() => {
+      cacheAbort.abort();
       finalize(true);
     }, safetyTimeoutMs);
 
@@ -420,10 +423,7 @@ export function preloadSiteAssets(
         typeof document !== "undefined" &&
         document.fonts &&
         document.fonts.ready
-          ? Promise.race([
-              document.fonts.ready.catch(() => undefined),
-              new Promise((r) => setTimeout(r, 2500)),
-            ])
+          ? document.fonts.ready.catch(() => undefined)
           : Promise.resolve();
 
       // 2. Window load signal (non-blocking fallback if already complete)
@@ -473,6 +473,7 @@ export function preloadSiteAssets(
         (img) => {
           if (img) {
             loadedFramesCount++;
+            window.dispatchEvent(new CustomEvent("visynth:first-frame-ready"));
             completedFrameIndices.add(0);
             emitProgress("frames");
             if (!isCancelled && options.onFirstFrameLoaded) {
@@ -529,13 +530,42 @@ export function preloadSiteAssets(
       }
 
       const framesQueuePromise = Promise.allSettled(workers);
-      const experiencePromise = waitForExperienceReady(4000);
+      const experiencePromise = waitForExperienceReady(8000);
+
+      // Fetch the remaining compressed frames into the browser HTTP cache.
+      // Do not retain all decoded bitmaps: 300 full-resolution frames can
+      // exceed a gigabyte of memory and make scrolling less reliable.
+      const cacheFrames = async () => {
+        if (options.prefersReducedMotion) return;
+        const remaining = Array.from({ length: TOTAL_SEQUENCE_FRAMES }, (_, i) => i)
+          .filter((i) => !frameOrder.includes(i));
+        let next = 0;
+        const cacheWorker = async () => {
+          while (!isCancelled && !resolved && next < remaining.length) {
+            const index = remaining[next++];
+            try {
+              const response = await fetch(getFrameUrl(index), {
+                cache: "force-cache",
+                signal: cacheAbort.signal,
+              });
+              if (!response.ok) failedFramesCount++;
+              else await response.blob();
+            } catch {
+              if (!cacheAbort.signal.aborted) failedFramesCount++;
+            }
+          }
+        };
+        await Promise.all(Array.from({ length: concurrency }, () => cacheWorker()));
+      };
 
       await Promise.allSettled([
         framesQueuePromise,
         windowLoadPromise,
         experiencePromise,
+        waitForRevealReady(8000),
       ]);
+
+      if (!isCancelled && !resolved) await cacheFrames();
 
       emitProgress("experience", 0.96);
 
