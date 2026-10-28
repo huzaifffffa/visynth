@@ -17,6 +17,14 @@ const TEAM = [
   { name: "Fuzail Aijaz", role: "Sales Head" },
 ] as const;
 
+const STUDIO_CHAPTERS = [
+  { number: "04", title: "Give the idea an identity.", discipline: "Branding / Art direction", copy: "A name. A mark. A visual language that belongs to you." },
+  { number: "05", title: "Give the story movement.", discipline: "3D / Motion", copy: "From the first frame to the final detail, every movement has a purpose." },
+  { number: "06", title: "Build what comes next.", discipline: "Web / Applications", copy: "Design becomes an experience. Thoughtful on the surface. Considered underneath." },
+  { number: "07", title: "Make the work travel.", discipline: "Marketing / Growth", copy: "Bring the right message to the right people, then give them a reason to stay." },
+  { number: "08", title: "Protect what you build.", discipline: "Cybersecurity / Systems", copy: "Creative ambition needs a resilient foundation." },
+] as const;
+
 export function SitePreloader() {
   const [isUnmounted, setIsUnmounted] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
@@ -26,6 +34,7 @@ export function SitePreloader() {
   const actOneRef = useRef<HTMLDivElement | null>(null);
   const teamRef = useRef<HTMLDivElement | null>(null);
   const finalRef = useRef<HTMLDivElement | null>(null);
+  const chaptersRef = useRef<HTMLDivElement | null>(null);
   const progressLineRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -81,6 +90,24 @@ export function SitePreloader() {
 
     let masterTimeline: gsap.core.Timeline | null = null;
     let exitTimeline: gsap.core.Timeline | null = null;
+    let waitingTimeline: gsap.core.Timeline | null = null;
+    let assetsReady = false;
+    assetController.promise.then(() => { assetsReady = true; });
+
+    const continueStory = () => {
+      resolveStory();
+      if (isDisposed || exitStarted || assetsReady || prefersReducedMotion) return;
+      const chapters = chaptersRef.current?.querySelectorAll<HTMLElement>("[data-waiting-chapter]");
+      if (!chapters?.length) return;
+      waitingTimeline = gsap.timeline({ repeat: -1 });
+      waitingTimeline.to(final, { autoAlpha: 0, duration: 0.45 });
+      for (const chapter of chapters) {
+        waitingTimeline
+          .fromTo(chapter, { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.65, ease: "power2.out" })
+          .to(chapter, { autoAlpha: 1, duration: 3.5 })
+          .to(chapter, { autoAlpha: 0, y: -10, duration: 0.45, ease: "power2.in" });
+      }
+    };
 
     const finishExit = () => {
       if (isDisposed) return;
@@ -89,6 +116,7 @@ export function SitePreloader() {
       window.removeEventListener("keydown", onKeyDown, { capture: true });
       window.clearTimeout(storyFallbackTimer);
       masterTimeline?.kill();
+      waitingTimeline?.kill();
       markSessionPreloadCompleted();
       try { window.sessionStorage.setItem("visynth_intro_seen", "true"); } catch {}
       unlock();
@@ -99,6 +127,7 @@ export function SitePreloader() {
     const triggerExit = async () => {
       if (isDisposed || exitStarted) return;
       exitStarted = true;
+      waitingTimeline?.kill();
       setIsExiting(true);
       root.setAttribute("data-exiting", "true");
       window.dispatchEvent(new CustomEvent("visynth:preloader-exit-start"));
@@ -159,7 +188,7 @@ export function SitePreloader() {
 
       masterTimeline = gsap.timeline({
         defaults: { ease: "power3.out" },
-        onComplete: resolveStory,
+        onComplete: continueStory,
       });
       try {
         masterTimeline.timeScale(window.sessionStorage.getItem("visynth_intro_seen") === "true" ? 3 : 1);
@@ -249,6 +278,7 @@ export function SitePreloader() {
       window.clearTimeout(storyFallbackTimer);
       window.removeEventListener("keydown", onKeyDown, { capture: true });
       masterTimeline?.kill();
+      waitingTimeline?.kill();
       exitTimeline?.kill();
       assetController.cancel();
       unlock();
@@ -396,6 +426,16 @@ export function SitePreloader() {
             Where vision becomes growth
           </p>
         </section>
+        <div ref={chaptersRef} className="pointer-events-none absolute inset-x-[clamp(22px,8vw,132px)] top-1/2 -translate-y-1/2" aria-hidden="true">
+          {STUDIO_CHAPTERS.map((chapter) => (
+            <section key={chapter.number} data-waiting-chapter className="invisible absolute inset-x-0 top-1/2 -translate-y-1/2 opacity-0">
+              <p className="mb-6 text-[10px] font-medium uppercase tracking-[0.28em] text-[#e51c2a]">{chapter.number} / {chapter.discipline}</p>
+              <h2 className="max-w-[14ch] text-[clamp(36px,6.8vw,94px)] font-light uppercase leading-[0.98] tracking-[-0.055em]">{chapter.title}</h2>
+              <div className="mt-7 h-px w-16 bg-[#e51c2a]" />
+              <p className="mt-6 max-w-[42ch] text-[clamp(13px,1.2vw,17px)] font-light leading-relaxed text-white/70">{chapter.copy}</p>
+            </section>
+          ))}
+        </div>
       </main>
 
       <footer
