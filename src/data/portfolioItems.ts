@@ -88,6 +88,32 @@ export const PORTFOLIO_ITEMS: PortfolioItem[] = [
     height: 1350,
   },
   {
+    id: "work-ecoelegance",
+    title: "EcoElegance",
+    category: "Branding",
+    discipline: "Sustainable Packaging & Luxury Brand Identity",
+    serviceProvided: "Packaging Architecture, Brand Suite & Sustainable Collateral",
+    projectObjective:
+      "Establish a high-end luxury brand identity and structural packaging system proving that environmental stewardship and gilded aesthetic sophistication can seamlessly coexist.",
+    projectType: "Studio project",
+    description:
+      "EcoElegance — Embrace Sustainable Elegance. A comprehensive sustainable luxury packaging and brand identity suite designed to redefine the high-end unboxing ritual. Crafted using matte black rigid gift boxes with gilded foil stamping, blind-debossed kraft protective sleeves, botanical leaf-pattern tissue wrap, organic cotton ribbon shopping bags, and gilded correspondence stationery.",
+    imageSrc: "/portfolio/eco-6.png",
+    imageAlt:
+      "EcoElegance complete sustainable luxury brand experience and structural packaging suite",
+    galleryImages: [
+      "/portfolio/eco-1.png",
+      "/portfolio/eco-2.png",
+      "/portfolio/eco-3.png",
+      "/portfolio/eco-4.png",
+      "/portfolio/eco-5.png",
+      "/portfolio/eco-6.png",
+    ],
+    cleanCard: true,
+    width: 1080,
+    height: 1350,
+  },
+  {
     id: "work-01",
     title: "Obsidian Sentinel Study",
     category: "3D Models",

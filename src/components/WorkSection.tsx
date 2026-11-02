@@ -72,7 +72,7 @@ export const WorkSection = React.memo(function WorkSection({ sectionRef, wheelRe
   const showPreview = (index: number) => {
     openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setPreviewIndex(index);
-    setActiveGalleryIdx(0);
+    const proj = projects[index]; const initialIdx = proj?.galleryImages && proj.imageSrc ? Math.max(0, proj.galleryImages.indexOf(proj.imageSrc)) : 0; setActiveGalleryIdx(initialIdx);
     setFocusPreview(true);
     setPreviewOpen(true);
     setActivation(value => value + 1);
@@ -193,7 +193,7 @@ export const WorkSection = React.memo(function WorkSection({ sectionRef, wheelRe
               </div>
 
               {/* Companion Pictures Column (shows the two other pictures & all 3 for instant switching) */}
-              <div className="flex sm:flex-col gap-2.5">
+              <div className={(preview.galleryImages?.length ?? 0) > 3 ? "flex sm:grid sm:grid-cols-2 gap-2 max-h-[360px] overflow-x-auto sm:overflow-y-auto pr-1 max-w-[min(265px,78vw)] sm:max-w-none" : "flex sm:flex-col gap-2.5 overflow-x-auto sm:overflow-visible max-w-[min(265px,78vw)] sm:max-w-none"}>
                 {preview.galleryImages.map((imgUrl, idx) => {
                   const isCurrent = idx === activeGalleryIdx;
                   return (
@@ -203,7 +203,7 @@ export const WorkSection = React.memo(function WorkSection({ sectionRef, wheelRe
                       onClick={() => setActiveGalleryIdx(idx)}
                       aria-label={`View campaign image ${idx + 1}`}
                       aria-pressed={isCurrent}
-                      className={`relative w-[78px] h-[102px] sm:w-[86px] sm:h-[112px] rounded-[16px] overflow-hidden bg-[#07080a] border transition-all cursor-pointer ${
+                      className={`relative rounded-[14px] overflow-hidden bg-[#07080a] border transition-all cursor-pointer shrink-0 ${(preview.galleryImages?.length ?? 0) > 3 ? "w-[66px] h-[88px] sm:w-[74px] sm:h-[96px]" : "w-[78px] h-[102px] sm:w-[86px] sm:h-[112px]"} ${
                         isCurrent
                           ? "border-[#ff2a2a] ring-2 ring-[#ff2a2a]/50 scale-[1.03] opacity-100"
                           : "border-white/20 opacity-75 hover:opacity-100 hover:border-white/45"
