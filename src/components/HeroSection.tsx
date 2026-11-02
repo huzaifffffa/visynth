@@ -37,7 +37,7 @@ export const HeroSection = React.memo(function HeroSection({
               data-hero="eyebrow-text"
               className="text-[clamp(8px,0.72vw,11.5px)] font-normal tracking-[0.28em] sm:tracking-[0.31em] text-[#adadad] uppercase whitespace-nowrap"
             >
-              CREATIVE TECHNOLOGY STUDIO
+              All-in-one brand development agency
             </span>
             <span
               data-hero="eyebrow-line"
@@ -47,7 +47,7 @@ export const HeroSection = React.memo(function HeroSection({
           </div>
 
           {/* Main Display Title: VISYNTH (Preserved) */}
-          <h1 className="sr-only">VISYNTH — where vision becomes growth</h1>
+          <h1 className="sr-only">VISYNTH. Your whole brand, one team.</h1>
           <div
             data-hero="wordmark"
             aria-hidden="true"
@@ -69,10 +69,7 @@ export const HeroSection = React.memo(function HeroSection({
               data-hero="tagline"
               className="w-full text-[clamp(17.5px,2.51vw,38.5px)] font-extralight tracking-[0.022em] leading-[1.15] sm:leading-[1.1] text-[#e4e4e4] whitespace-normal sm:whitespace-nowrap"
             >
-              where vision becomes{" "}
-              <span className="text-[#e61e1e] font-light drop-shadow-[0_0_16px_rgba(255,25,25,0.45)]">
-                growth
-              </span>
+              Your whole brand.<br />One team.
             </p>
           </div>
 
@@ -81,17 +78,17 @@ export const HeroSection = React.memo(function HeroSection({
             <p className="hidden sm:block">
               <span className="block overflow-hidden">
                 <span data-hero="desc-line" className="block">
-                  We build distinctive brands, digital experiences, and intelligent
+                  Branding, AI content creation, plus 2D and 3D modelling.
                 </span>
               </span>
               <span className="block overflow-hidden">
                 <span data-hero="desc-line" className="block">
-                  technology—from branding and 3D animation to web, app,
+                  Social media management, web development, SEO and cybersecurity.
                 </span>
               </span>
               <span className="block overflow-hidden">
                 <span data-hero="desc-line" className="block">
-                  marketing, and cybersecurity solutions.
+                  One team, one clear direction.
                 </span>
               </span>
             </p>
@@ -99,7 +96,7 @@ export const HeroSection = React.memo(function HeroSection({
             {/* Mobile optimized flow (natural wrapping without artificial breaks) */}
             <p className="sm:hidden overflow-hidden">
               <span data-hero="desc-line" className="block">
-                We build distinctive brands, digital experiences, and intelligent technology—from branding and 3D animation to web, app, marketing, and cybersecurity solutions.
+                Branding, AI content creation, social media management, 2D and 3D modelling, web development, SEO and cybersecurity. One team, one clear direction.
               </span>
             </p>
           </div>
@@ -110,10 +107,10 @@ export const HeroSection = React.memo(function HeroSection({
               data-hero="cta"
               href="#work"
               onClick={handleCtaClick}
-              className="inline-flex items-center gap-[clamp(10px,1.3vw,20px)] group cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/60 py-1"
+              className="inline-flex min-h-11 items-center gap-[clamp(10px,1.3vw,20px)] border-b border-white/40 px-1 py-2 group cursor-pointer transition-[transform,opacity,border-color] duration-300 hover:border-[#ff2a2a] active:translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff2a2a]"
             >
-              <span className="text-[clamp(9px,0.72vw,11.5px)] font-semibold tracking-[0.24em] text-[#f0f0f0] uppercase transition-all duration-300 group-hover:text-white group-hover:tracking-[0.26em]">
-                EXPLORE OUR WORK
+              <span className="text-[clamp(9px,0.72vw,11.5px)] font-semibold tracking-[0.24em] text-[#f0f0f0] uppercase transition-colors duration-300 group-hover:text-white">
+                View selected work
               </span>
               <div className="transition-transform duration-300 ease-out group-hover:translate-x-1.5">
                 <CtaArrowIcon />

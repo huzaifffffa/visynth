@@ -16,6 +16,7 @@ import { ScrollProgressIndicator } from "./ScrollProgressIndicator";
 import { HeroSection } from "./HeroSection";
 import { SkillsSection } from "./SkillsSection";
 import { WorkSection } from "./WorkSection";
+import type { WorksWheelHandle } from "./ui/works-wheel";
 import { AboutSection } from "./AboutSection";
 import { ContactSection } from "./ContactSection";
 
@@ -36,14 +37,80 @@ function getFrameSrc(indexZeroBased: number): string {
   return getFrameUrl(indexZeroBased);
 }
 
-// Target normalized scroll progress anchors (0..1) for direct section navigation
+// Target normalized timeline progress anchors (0..1) for direct section navigation
 const SECTION_SCROLL_ANCHORS: Record<SectionId, number> = {
   home: 0,
   skills: 0.31,
-  work: 0.57,
+  work: 0.50,
   about: 0.8,
   contact: 0.985,
 };
+
+// Smooth C1-continuous scroll-to-timeline mapping (Catmull-Rom / monotone cubic spline):
+// Gives the Work carousel ~2.8x more scroll travel while smoothly blending scroll velocity
+// across the Skills -> Work and Work -> About transitions with zero sudden speed step.
+const SCROLL_KNOTS_X = [0, 0.28, 0.36, 0.74, 0.82, 1.0];
+const SCROLL_KNOTS_Y = [0, 0.38, 0.46, 0.68, 0.75, 1.0];
+const SCROLL_SLOPES = [1.357, 1.15, 0.72, 0.72, 1.15, 1.389];
+
+function evalCubicHermiteSegment(
+  t: number,
+  x0: number,
+  x1: number,
+  y0: number,
+  y1: number,
+  m0: number,
+  m1: number
+): number {
+  const h = x1 - x0;
+  const s = (t - x0) / h;
+  const s2 = s * s;
+  const s3 = s2 * s;
+  const h00 = 2 * s3 - 3 * s2 + 1;
+  const h10 = s3 - 2 * s2 + s;
+  const h01 = -2 * s3 + 3 * s2;
+  const h11 = s3 - s2;
+  return h00 * y0 + h10 * h * m0 + h01 * y1 + h11 * h * m1;
+}
+
+function mapScrollToTimelineProgress(rawP: number): number {
+  const clamped = Math.min(1, Math.max(0, rawP));
+  for (let i = 0; i < SCROLL_KNOTS_X.length - 1; i++) {
+    if (clamped <= SCROLL_KNOTS_X[i + 1]) {
+      return Math.min(
+        1,
+        Math.max(
+          0,
+          evalCubicHermiteSegment(
+            clamped,
+            SCROLL_KNOTS_X[i],
+            SCROLL_KNOTS_X[i + 1],
+            SCROLL_KNOTS_Y[i],
+            SCROLL_KNOTS_Y[i + 1],
+            SCROLL_SLOPES[i],
+            SCROLL_SLOPES[i + 1]
+          )
+        )
+      );
+    }
+  }
+  return 1;
+}
+
+function mapTimelineToScrollProgress(timelineP: number): number {
+  const target = Math.min(1, Math.max(0, timelineP));
+  let lo = 0;
+  let hi = 1;
+  for (let iter = 0; iter < 18; iter++) {
+    const mid = (lo + hi) * 0.5;
+    if (mapScrollToTimelineProgress(mid) < target) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return (lo + hi) * 0.5;
+}
 
 function getSectionFromProgress(progress: number): SectionId {
   if (progress < 0.16) return "home";
@@ -197,6 +264,7 @@ export function CinematicExperience() {
   const homeRef = useRef<HTMLElement | null>(null);
   const skillsRef = useRef<HTMLElement | null>(null);
   const workRef = useRef<HTMLElement | null>(null);
+  const workWheelRef = useRef<WorksWheelHandle | null>(null);
   const aboutRef = useRef<HTMLElement | null>(null);
   const contactRef = useRef<HTMLElement | null>(null);
 
@@ -308,6 +376,7 @@ export function CinematicExperience() {
     }
 
     ctx2d.drawImage(img, metrics.dx, metrics.dy, metrics.dw, metrics.dh);
+    canvas.dataset.frameIndex = String(resolvedIndex);
   }, []);
 
   // Schedule a single requestAnimationFrame draw; coalesces multiple scroll ticks per frame
@@ -378,7 +447,8 @@ export function CinematicExperience() {
         scheduleFrameDraw(targetFrame, true);
       }
 
-      const targetScrollY = st.start + (st.end - st.start) * anchor;
+      const scrollAnchor = mapTimelineToScrollProgress(anchor);
+      const targetScrollY = st.start + (st.end - st.start) * scrollAnchor;
       window.scrollTo({
         top: targetScrollY,
         behavior: instant ? "instant" : "smooth",
@@ -414,7 +484,7 @@ export function CinematicExperience() {
 
     const applyCanvasSize = (force = false) => {
       if (!canvas) return;
-      const vw = window.innerWidth;
+      const vw = document.documentElement.clientWidth || window.innerWidth;
       const vh = window.innerHeight;
 
       // Ignore minor vertical-only address bar height changes on mobile while scrolling
@@ -741,6 +811,7 @@ export function CinematicExperience() {
 
       gsapCtx.add(() => {
         const tl = gsap.timeline({
+          paused: true,
           defaults: { ease: "none" },
         });
 
@@ -749,17 +820,15 @@ export function CinematicExperience() {
         const st = ScrollTrigger.create({
           trigger: wrapper,
           start: "top top",
-          end: () => `+=${Math.round(window.innerHeight * 8.0)}`,
+          end: () => `+=${Math.round(window.innerHeight * 11.5)}`,
           pin: true,
-          // Native scrolling remains the source of truth; scrub keeps the visual
-          // timeline locked 1:1 to the browser's current scroll position.
-          scrub: true,
+          scrub: false,
           fastScrollEnd: true,
           anticipatePin: 1,
           invalidateOnRefresh: false,
-          animation: tl,
           onUpdate: (self) => {
-            const p = self.progress;
+            const p = mapScrollToTimelineProgress(self.progress);
+            tl.progress(p);
             currentProgressRef.current = p;
             markScrollActivity();
 
@@ -993,124 +1062,23 @@ export function CinematicExperience() {
         // =======================================================================
         // PHASE C — WORK (t: 45 -> 70, Frames 135 -> 210 — Red Sphere Sketch)
         // =======================================================================
-      const workEyebrowText = workEl.querySelector(
-        '[data-anim="eyebrow-text"]'
-      );
-      const workEyebrowLine = workEl.querySelector(
-        '[data-anim="eyebrow-line"]'
-      );
-      const workHeadingLines = workEl.querySelectorAll(
-        '[data-anim="heading-line"]'
-      );
-      const workBody = workEl.querySelector('[data-anim="body-copy"]');
-      const workRows = workEl.querySelectorAll('[data-anim="work-row"]');
-      const workCta = workEl.querySelector('[data-anim="work-cta"]');
-      const workContainer = workEl.querySelector('[data-work="container"]');
-
-      tl.fromTo(
-        workContrastVeilRef.current,
-        { opacity: 0 },
-        { opacity: 1, duration: 4.5, ease: "power2.inOut" },
-        43.5
-      )
-        .fromTo(
-          workEl,
-          { opacity: 0, pointerEvents: "none" },
-          { opacity: 1, pointerEvents: "auto", duration: 2 },
-          45.5
-        )
-        .fromTo(
-          workEyebrowText,
-          { y: 14, opacity: 0 },
-          { y: 0, opacity: 1, duration: 3.5, ease: "power2.out" },
-          46
-        )
-        .fromTo(
-          workEyebrowLine,
-          { scaleX: 0, opacity: 0 },
-          { scaleX: 1, opacity: 1, duration: 4.5, ease: "power2.out" },
-          46.5
-        )
-        .fromTo(
-          workHeadingLines,
-          { yPercent: 115, opacity: 0 },
-          {
-            yPercent: 0,
-            opacity: 1,
-            stagger: 1.1,
-            duration: 4.5,
-            ease: "power3.out",
-          },
-          47
-        )
-        .fromTo(
-          workBody,
-          { y: 18, opacity: 0 },
-          { y: 0, opacity: 1, duration: 4, ease: "power2.out" },
-          49
-        )
-        .fromTo(
-          workRows,
-          { x: -18, opacity: 0 },
-          {
-            x: 0,
-            opacity: 1,
-            stagger: 0.75,
-            duration: 3.8,
-            ease: "power2.out",
-          },
-          50
-        )
-        .fromTo(
-          workCta,
-          { yPercent: 115, opacity: 0 },
-          { yPercent: 0, opacity: 1, duration: 3.8, ease: "power2.out" },
-          52.5
-        )
-        .fromTo(
-          workContainer,
-          { y: 16 },
-          { y: -14, duration: 23, ease: "none" },
-          46
-        )
-        // Exit Work as camera zooms through the red sphere threads into the subway (t: 65 -> 71)
-        .to(
-          [workEyebrowText, workEyebrowLine, workBody, workCta],
-          { y: -16, opacity: 0, duration: 3.5, ease: "power2.in" },
-          65.5
-        )
-        .to(
-          workHeadingLines,
-          {
-            yPercent: -115,
-            opacity: 0,
-            stagger: 0.6,
-            duration: 3.6,
-            ease: "power2.in",
-          },
-          65.8
-        )
-        .to(
-          workRows,
-          {
-            x: 16,
-            opacity: 0,
-            stagger: 0.4,
-            duration: 3.2,
-            ease: "power2.in",
-          },
-          66
-        )
-        .to(
-          workEl,
-          { opacity: 0, pointerEvents: "none", duration: 1.5 },
-          69.5
-        )
-        .to(
-          workContrastVeilRef.current,
-          { opacity: 0.35, duration: 4.5, ease: "power2.inOut" },
-          68.5
-        );
+      // Veil reaches 75% before Work enters and remains there through its
+      // complete exit. Using opacity (instead of autoAlpha/visibility) keeps
+      // all 8 3D card GPU textures warm in VRAM so Skills -> Work never stalls.
+      tl.fromTo(workContrastVeilRef.current, { opacity: 0 },
+        { opacity: 1, duration: 3, ease: "sine.inOut" }, 41.5);
+      tl.to(workContrastVeilRef.current,
+        { opacity: 0, duration: 2.5, ease: "sine.inOut" }, 70.5);
+      tl.fromTo(workEl,
+        { opacity: 0, pointerEvents: "none" },
+        { opacity: 1, pointerEvents: "auto", duration: 3.5, ease: "sine.inOut" }, 43.5);
+      const wheel = { turn: 0 };
+      const projectCount = workEl.querySelectorAll(".works-wheel-card").length;
+      tl.to(wheel, { turn: projectCount, duration: 21, ease: "none",
+        onUpdate: () => workWheelRef.current?.setTurn(wheel.turn),
+      }, 46.5);
+      tl.to(workEl, { opacity: 0, pointerEvents: "none",
+        duration: 3, ease: "sine.inOut" }, 67.8);
 
       // =======================================================================
       // PHASE D — ABOUT (t: 71 -> 88, Frames 213 -> 264 — Red-Lit Subway)
@@ -1290,7 +1258,7 @@ export function CinematicExperience() {
         );
 
         if (scrollTriggerRef.current) {
-          tl.progress(scrollTriggerRef.current.progress);
+          tl.progress(mapScrollToTimelineProgress(scrollTriggerRef.current.progress));
         }
         handleHashNavigation(true);
       });
@@ -1390,9 +1358,10 @@ export function CinematicExperience() {
       />
 
       {/* Pinned Master Viewport */}
-      <div
+      <main
+        id="main-content"
         ref={wrapperRef}
-        className="relative w-full h-screen overflow-hidden bg-[#000000]"
+        className="relative w-full h-[100svh] min-h-[540px] overflow-hidden bg-[#000000]"
       >
         <div ref={stageRef} className="relative w-full h-full">
           {/* Layer 1: 300-Frame High-Performance Canvas Sequence */}
@@ -1401,7 +1370,7 @@ export function CinematicExperience() {
             width={DEFAULT_FRAME_WIDTH}
             height={DEFAULT_FRAME_HEIGHT}
             aria-hidden="true"
-            className="absolute inset-0 z-0 w-full h-full pointer-events-none select-none will-change-[transform]"
+            className="absolute inset-0 z-0 w-full h-full max-w-full pointer-events-none select-none will-change-[transform]"
           />
 
           {/* Layer 2a: Base Left-Side Vignette for Typography Readability */}
@@ -1414,7 +1383,7 @@ export function CinematicExperience() {
           <div
             ref={workContrastVeilRef}
             aria-hidden="true"
-            className="absolute inset-0 z-10 opacity-0 pointer-events-none bg-[linear-gradient(90deg,rgba(0,0,0,0.92)_0%,rgba(0,0,0,0.78)_44%,rgba(0,0,0,0.22)_74%,rgba(0,0,0,0.08)_100%)] will-change-[opacity]"
+            className="absolute inset-0 z-10 opacity-0 pointer-events-none bg-black/75 will-change-[opacity]"
           />
 
           {/* Layer 2c: Crimson-Dark Atmospheric Settling Overlay for Final Contact Scene */}
@@ -1441,6 +1410,14 @@ export function CinematicExperience() {
 
           <WorkSection
             sectionRef={workRef}
+            wheelRef={workWheelRef}
+            onSeek={(progress) => {
+              const st = scrollTriggerRef.current;
+              if (!st) return;
+              const p = (46.5 + progress * 21) / 100;
+              const scrollAnchor = mapTimelineToScrollProgress(p);
+              window.scrollTo({ top: st.start + (st.end - st.start) * scrollAnchor, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+            }}
             onNavigateContact={() => scrollToSection("contact")}
           />
 
@@ -1451,7 +1428,7 @@ export function CinematicExperience() {
             onReturnHome={() => scrollToSection("home")}
           />
         </div>
-      </div>
+      </main>
     </div>
   );
 }

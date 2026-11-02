@@ -1,0 +1,27 @@
+import { chromium } from 'playwright';
+import { writeFileSync } from 'node:fs';
+const label = process.argv[2] || 'before';
+const browser = await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
+const page = await browser.newPage({viewport:{width:1440,height:900}});
+const errors=[];page.on('pageerror',e=>errors.push(e.message));
+await page.goto('http://localhost:3110/',{waitUntil:'load',timeout:90000});
+await page.waitForFunction(()=>document.documentElement.classList.contains('visynth-preloaded'),{timeout:20000});
+await page.waitForTimeout(2000);
+const cdp=await page.context().newCDPSession(page);
+await cdp.send('Performance.enable');
+await page.evaluate(()=>{window.scrollTo(0,(document.documentElement.scrollHeight-innerHeight)*.5)});
+await page.waitForTimeout(1500);
+await page.mouse.move(720,450);
+await page.evaluate(()=>{window.qaFrames=[];window.qaLong=[];window.qaObserver=new PerformanceObserver(l=>window.qaLong.push(...l.getEntries().map(e=>e.duration)));window.qaObserver.observe({type:'longtask',buffered:false});let last=performance.now();window.qaRunning=true;function tick(t){window.qaFrames.push(t-last);last=t;if(window.qaRunning)requestAnimationFrame(tick)}requestAnimationFrame(tick)});
+const before=await cdp.send('Performance.getMetrics');
+const events=[];cdp.on('Tracing.dataCollected',e=>events.push(...e.value));
+await cdp.send('Tracing.start',{categories:'devtools.timeline,toplevel,blink.user_timing',transferMode:'ReportEvents'});
+for(let i=0;i<50;i++){await page.mouse.wheel(0,i<25?16:-16);await page.waitForTimeout(20)}
+const ended=new Promise(resolve=>cdp.once('Tracing.tracingComplete',resolve));await cdp.send('Tracing.end');await ended;
+const after=await cdp.send('Performance.getMetrics');
+const result=await page.evaluate(()=>{window.qaRunning=false;window.qaObserver.disconnect();return {frames:window.qaFrames,longTasks:window.qaLong,previewOpen:document.querySelector('.project-editorial-backdrop')?.getAttribute('data-open'),cards:document.querySelectorAll('.works-wheel-card').length}});
+const metrics=Object.fromEntries(after.metrics.map(m=>[m.name,m.value-(before.metrics.find(b=>b.name===m.name)?.value||0)]));
+result.frames.sort((a,b)=>a-b);result.frameP95=result.frames[Math.floor(result.frames.length*.95)];result.over33=result.frames.filter(v=>v>33).length;result.errors=errors;result.metrics=metrics;
+result.traceTotals=Object.fromEntries(['Layout','UpdateLayoutTree','Paint','FunctionCall','RunTask'].map(name=>[name,events.filter(e=>e.name===name&&e.dur).reduce((sum,e)=>sum+e.dur/1000,0)]));
+writeFileSync(`performance/work-${label}.json`,JSON.stringify(result,null,2));writeFileSync(`performance/work-${label}-trace.json`,JSON.stringify({traceEvents:events}));
+await page.screenshot({path:`performance/work-${label}.png`});console.log(JSON.stringify({...result,frames:result.frames.length}));await browser.close();

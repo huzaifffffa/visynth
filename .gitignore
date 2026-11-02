@@ -41,3 +41,10 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# local QA and test previews
+*-preview.jpg
+*-preview.png
+*-contact-sheet.jpg
+redesigned-project-cards.jpg
+/performance/

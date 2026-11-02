@@ -32,8 +32,19 @@ export function getSharedFrameStates(): Uint8Array {
 export function hasSessionPreloadCompleted(): boolean {
   if (hasCompletedSessionPreload) return true;
   if (typeof window !== "undefined") {
-    if (document.documentElement.classList.contains("visynth-preloaded")) {
+    let storedCompletion = false;
+    try {
+      storedCompletion =
+        window.sessionStorage.getItem("visynth_preload_complete") === "true";
+    } catch {
+      storedCompletion = false;
+    }
+    if (
+      storedCompletion ||
+      document.documentElement.classList.contains("visynth-preloaded")
+    ) {
       hasCompletedSessionPreload = true;
+      document.documentElement.classList.add("visynth-preloaded");
       return true;
     }
   }
@@ -44,6 +55,12 @@ export function markSessionPreloadCompleted(): void {
   hasCompletedSessionPreload = true;
   if (typeof window !== "undefined") {
     document.documentElement.classList.add("visynth-preloaded");
+    try {
+      window.sessionStorage.setItem("visynth_preload_complete", "true");
+    } catch {
+      // Storage can be unavailable in hardened browsing modes. The in-memory
+      // and document-class fallbacks still prevent a repeat intro this visit.
+    }
   }
 }
 
@@ -270,12 +287,12 @@ function buildInitialPreloadFrames(
   prefersReducedMotion: boolean,
 ): number[] {
   if (prefersReducedMotion) {
-    return [...REDUCED_MOTION_KEYFRAMES];
+    return [REDUCED_MOTION_KEYFRAMES[0]];
   }
 
-  // Every scroll position must have its exact frame ready, including reverse
-  // and uninterrupted gestures. Downloading bytes alone is insufficient.
-  return Array.from({ length: TOTAL_SEQUENCE_FRAMES }, (_, index) => index);
+  // Only the first visual frame blocks access to the shell. The experience's
+  // scroll-prioritized loader owns all subsequent frames after reveal.
+  return [0];
 }
 
 export interface PreloadControllerOptions {
@@ -306,14 +323,14 @@ export interface PreloadResult {
  * 1. Critical fonts (document.fonts.ready)
  * 2. On `/` only: Hero frame (/frames/frame_001.webp) + selective opening/anchor frames + Canvas/GSAP readiness
  * 3. Window load state as additional readiness signal
- * With a hard safety timeout (default 15,000ms) so the site never hangs.
+ * With a hard safety timeout (default 4,500ms) so the site never hangs.
  */
 export function preloadSiteAssets(
   options: PreloadControllerOptions
 ): { promise: Promise<PreloadResult>; cancel: () => void } {
   let isCancelled = false;
   const cacheAbort = new AbortController();
-  const safetyTimeoutMs = options.safetyTimeoutMs ?? 15000;
+  const safetyTimeoutMs = options.safetyTimeoutMs ?? 3000;
 
   const cancel = () => {
     isCancelled = true;
@@ -410,7 +427,7 @@ export function preloadSiteAssets(
               setTimeout(() => {
                 window.removeEventListener("load", onLoad);
                 res();
-              }, 2500);
+               }, 1200);
             });
 
       // On subpages (/portfolio, /privacy-policy, /copyright), do NOT download the 300-frame home canvas sequence
@@ -424,8 +441,7 @@ export function preloadSiteAssets(
         return;
       }
 
-      const { isSlowNetwork, concurrency } =
-        isConstrainedConnectionOrMobile();
+      const { isSlowNetwork } = isConstrainedConnectionOrMobile();
 
       const frameOrder = buildInitialPreloadFrames(
         options.prefersReducedMotion
@@ -453,84 +469,21 @@ export function preloadSiteAssets(
         }
       );
 
-      await Promise.allSettled([fontsPromise, firstFramePromise]);
+      await Promise.allSettled([
+        Promise.race([
+          fontsPromise,
+          new Promise<void>((resolve) => window.setTimeout(resolve, 800)),
+        ]),
+        Promise.race([
+          firstFramePromise,
+          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 1200)),
+        ]),
+      ]);
 
       if (isCancelled || resolved) {
         clearTimeout(safetyTimer);
         return;
       }
-
-      // 4. Controlled Concurrency Queue for Selective Initial Frames (yields between decodes to avoid main-thread long tasks)
-      let cursor = 0;
-
-      const runFrameWorker = async (): Promise<void> => {
-        while (!isCancelled && !resolved && cursor < frameOrder.length) {
-          const frameIdx = frameOrder[cursor++];
-          if (
-            sharedFrameStates[frameIdx] === FRAME_LOADED &&
-            sharedImages[frameIdx]
-          ) {
-            completedFrameIndices.add(frameIdx);
-            emitProgress("frames");
-            continue;
-          }
-          // Yield briefly between decodes so main-thread tasks stay well under 50ms
-          await new Promise((r) => setTimeout(r, 12));
-          if (isCancelled || resolved) break;
-          const img = await loadSequenceFrame(frameIdx, false);
-          if (img) {
-            loadedFramesCount++;
-          } else {
-            failedFramesCount++;
-          }
-          completedFrameIndices.add(frameIdx);
-          emitProgress("frames");
-        }
-      };
-
-      const workers: Promise<void>[] = [];
-      const workerCount = Math.min(concurrency, frameOrder.length);
-      for (let w = 0; w < workerCount; w++) {
-        workers.push(runFrameWorker());
-      }
-
-      const framesQueuePromise = Promise.allSettled(workers);
-      const experiencePromise = waitForExperienceReady(8000);
-
-      // Fetch the remaining compressed frames into the browser HTTP cache.
-      // Do not retain all decoded bitmaps: 300 full-resolution frames can
-      // exceed a gigabyte of memory and make scrolling less reliable.
-      const cacheFrames = async () => {
-        if (options.prefersReducedMotion) return;
-        const remaining = Array.from({ length: TOTAL_SEQUENCE_FRAMES }, (_, i) => i)
-          .filter((i) => !frameOrder.includes(i));
-        let next = 0;
-        const cacheWorker = async () => {
-          while (!isCancelled && !resolved && next < remaining.length) {
-            const index = remaining[next++];
-            try {
-              const response = await fetch(getFrameUrl(index), {
-                cache: "force-cache",
-                signal: cacheAbort.signal,
-              });
-              if (!response.ok) failedFramesCount++;
-              else await response.blob();
-            } catch {
-              if (!cacheAbort.signal.aborted) failedFramesCount++;
-            }
-          }
-        };
-        await Promise.all(Array.from({ length: concurrency }, () => cacheWorker()));
-      };
-
-      await Promise.allSettled([
-        framesQueuePromise,
-        windowLoadPromise,
-        experiencePromise,
-        waitForRevealReady(8000),
-      ]);
-
-      if (!isCancelled && !resolved) await cacheFrames();
 
       emitProgress("experience", 0.96);
 

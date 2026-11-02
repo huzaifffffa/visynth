@@ -50,7 +50,7 @@ export default function CopyrightPage() {
     <div className="min-h-screen w-full bg-[#050505] text-white flex flex-col justify-between overflow-x-clip">
       <SiteNavigation isSubPage />
 
-      <main className="flex-1 w-full max-w-[1440px] mx-auto px-[5.8%] pt-28 pb-20 md:pt-36 md:pb-28">
+      <main id="main-content" className="flex-1 w-full max-w-[1440px] mx-auto px-[5.8%] pt-28 pb-20 md:pt-36 md:pb-28">
         {/* Subtle atmospheric glow */}
         <div
           className="pointer-events-none fixed inset-0 z-0"
@@ -132,7 +132,7 @@ export default function CopyrightPage() {
             <div className="flex flex-wrap items-center gap-3">
               <Link
                 href="/#contact"
-                className="inline-flex items-center gap-3 border border-[#ff1e1e]/60 bg-[#ff1e1e]/[0.1] hover:bg-[#ff1e1e]/[0.2] hover:border-[#ff3b3b] px-5 py-2.5 text-[10px] tracking-[0.24em] uppercase font-medium text-white transition-all duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#ff2a2a]"
+                className="inline-flex items-center gap-3 border border-[#ff1e1e]/60 bg-[#ff1e1e]/[0.1] hover:bg-[#ff1e1e]/[0.2] hover:border-[#ff3b3b] px-5 py-2.5 text-[10px] tracking-[0.24em] uppercase font-medium text-white transition-[transform,opacity,color,background-color,border-color,box-shadow] duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#ff2a2a]"
               >
                 <span>REQUEST PERMISSION</span>
                 <span aria-hidden="true" className="text-[#ff3b3b]">
@@ -145,7 +145,7 @@ export default function CopyrightPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Message VISYNTH on WhatsApp (opens in a new tab)"
-                className="inline-flex items-center gap-2.5 border border-white/[0.2] bg-white/[0.03] hover:bg-white/[0.08] hover:border-white/[0.4] px-5 py-2.5 text-[10px] tracking-[0.24em] uppercase font-medium text-white/90 hover:text-white transition-all duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#ff2a2a]"
+                className="inline-flex items-center gap-2.5 border border-white/[0.2] bg-white/[0.03] hover:bg-white/[0.08] hover:border-white/[0.4] px-5 py-2.5 text-[10px] tracking-[0.24em] uppercase font-medium text-white/90 hover:text-white transition-[transform,opacity,color,background-color,border-color,box-shadow] duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#ff2a2a]"
               >
                 <span
                   className="w-1.5 h-1.5 rounded-full bg-[#ff2a2a]"
@@ -158,26 +158,21 @@ export default function CopyrightPage() {
         </div>
       </main>
 
-      <footer className="relative z-10 w-full max-w-[1440px] mx-auto px-[5.8%] py-6 border-t border-white/[0.1] bg-[#050505] flex flex-col md:flex-row items-center justify-between gap-4 text-[9.5px] tracking-[0.22em] uppercase text-white/50">
-        <span className="text-center md:text-left">
-          VISYNTH — CREATIVE TECHNOLOGY STUDIO
-        </span>
-        <div className="flex flex-wrap items-center justify-center md:justify-end gap-x-6 gap-y-2.5">
+      <footer className="relative z-10 w-full max-w-[1440px] mx-auto px-[5.8%] py-4 border-t border-white/[0.1] bg-[#050505] flex flex-col md:flex-row items-center justify-between gap-4 text-[10px] font-mono tracking-[0.2em] uppercase text-white/60">
+        <div className="flex items-center gap-2.5 text-center md:text-left">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+          <span>VISYNTH — CREATIVE TECHNOLOGY STUDIO</span>
+        </div>
+        <div className="flex flex-wrap items-center justify-center md:justify-end gap-x-3 gap-y-1">
           <Link
             href="/"
-            className="hover:text-white transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm px-1"
+            className="min-h-[44px] inline-flex items-center px-2.5 text-white/60 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-sm"
           >
             HOME
           </Link>
           <Link
-            href="/portfolio"
-            className="hover:text-white transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm px-1"
-          >
-            PORTFOLIO
-          </Link>
-          <Link
             href="/#contact"
-            className="hover:text-white transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm px-1"
+            className="min-h-[44px] inline-flex items-center px-2.5 text-white/60 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-sm"
           >
             CONTACT
           </Link>
@@ -186,7 +181,7 @@ export default function CopyrightPage() {
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Message VISYNTH on WhatsApp (opens in a new tab)"
-            className="hover:text-[#ff4040] transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm px-1"
+            className="min-h-[44px] inline-flex items-center px-2.5 text-white/60 hover:text-[#25D366] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] rounded-sm"
           >
             WHATSAPP
           </a>
@@ -195,13 +190,13 @@ export default function CopyrightPage() {
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Visit VISYNTH on Instagram @visynth.official (opens in a new tab)"
-            className="hover:text-[#ff4040] transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm px-1"
+            className="min-h-[44px] inline-flex items-center px-2.5 text-white/60 hover:text-[#E4405F] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E4405F] rounded-sm"
           >
             INSTAGRAM
           </a>
           <Link
             href="/privacy-policy"
-            className="hover:text-white transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm px-1"
+            className="min-h-[44px] inline-flex items-center px-2.5 text-white/60 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-sm"
           >
             PRIVACY POLICY
           </Link>

@@ -92,7 +92,7 @@ export function HomeEntry() {
   }
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-[#000000] text-white">
+    <div className="relative w-full h-[100svh] min-h-[540px] overflow-hidden bg-[#000000] text-white">
       <HeroSection sectionRef={homeShellRef} onExploreWork={() => {}} />
     </div>
   );

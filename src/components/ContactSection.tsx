@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import Link from "next/link";
 import {
   AnimatedHeading,
@@ -16,6 +16,7 @@ interface ContactSectionProps {
 const DISCIPLINE_OPTIONS = [
   "Branding & Identity",
   "3D Animation",
+  "AI Content Creation",
   "Web & App",
   "Digital Marketing",
   "Cybersecurity",
@@ -55,6 +56,7 @@ export function InstagramIcon({ className = "w-4 h-4" }: { className?: string })
 }
 
 type SubmissionStatus = "idle" | "submitting" | "success" | "error";
+type ContactField = "name" | "email" | "message";
 
 export const ContactSection = React.memo(function ContactSection({
   sectionRef,
@@ -62,12 +64,18 @@ export const ContactSection = React.memo(function ContactSection({
 }: ContactSectionProps) {
   const [status, setStatus] = useState<SubmissionStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<ContactField, string>>
+  >({});
   const [selectedDisciplines, setSelectedDisciplines] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [botcheck, setBotcheck] = useState("");
   const [submittedName, setSubmittedName] = useState("");
+  const nameRef = useRef<HTMLInputElement | null>(null);
+  const emailRef = useRef<HTMLInputElement | null>(null);
+  const messageRef = useRef<HTMLTextAreaElement | null>(null);
 
   const isSubmitting = status === "submitting";
   const isSuccess = status === "success";
@@ -94,22 +102,33 @@ export const ContactSection = React.memo(function ContactSection({
     const trimmedEmail = email.trim();
     const trimmedMessage = message.trim();
 
-    if (!trimmedName) {
-      setStatus("error");
-      setErrorMessage("Please enter your name before sending.");
-      return;
-    }
-
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
-      setStatus("error");
-      setErrorMessage("Please enter a valid email address.");
-      return;
+    const nextFieldErrors: Partial<Record<ContactField, string>> = {};
+    if (!trimmedName) {
+      nextFieldErrors.name = "Enter your name.";
+    }
+    if (!trimmedEmail) {
+      nextFieldErrors.email = "Enter your email address.";
+    } else if (!emailRegex.test(trimmedEmail)) {
+      nextFieldErrors.email = "Enter an email address in the format name@example.com.";
+    }
+    if (!trimmedMessage) {
+      nextFieldErrors.message = "Add a brief description of your project.";
     }
 
-    if (!trimmedMessage) {
+    const firstInvalidField = (
+      ["name", "email", "message"] as ContactField[]
+    ).find((field) => nextFieldErrors[field]);
+    if (firstInvalidField) {
       setStatus("error");
-      setErrorMessage("Please include a brief message about your project.");
+      setFieldErrors(nextFieldErrors);
+      setErrorMessage("Review the highlighted field and try again.");
+      const fieldRefs = {
+        name: nameRef,
+        email: emailRef,
+        message: messageRef,
+      };
+      window.requestAnimationFrame(() => fieldRefs[firstInvalidField].current?.focus());
       return;
     }
 
@@ -123,12 +142,13 @@ export const ContactSection = React.memo(function ContactSection({
     }
 
     setStatus("submitting");
+    setFieldErrors({});
     setErrorMessage("");
 
     try {
       const payload = {
         access_key: accessKey,
-        subject: `New Project Inquiry from ${trimmedName} — VISYNTH`,
+        subject: `New project inquiry from ${trimmedName} | VISYNTH`,
         from_name: "VISYNTH Studio Website",
         name: trimmedName,
         email: trimmedEmail,
@@ -164,6 +184,7 @@ export const ContactSection = React.memo(function ContactSection({
         setEmail("");
         setMessage("");
         setSelectedDisciplines([]);
+        setFieldErrors({});
       } else {
         setStatus("error");
         setErrorMessage(
@@ -191,28 +212,26 @@ export const ContactSection = React.memo(function ContactSection({
           data-contact="container"
           className="w-full max-w-[clamp(330px,48vw,700px)] flex flex-col items-start"
         >
-          <SectionEyebrow label="04 / CONTACT" />
+          <SectionEyebrow label="04 CONTACT" />
 
-          {/* Required Headline: "Let's build what comes next." */}
           <AnimatedHeading
             lines={[
-              "Let's build",
+              "Tell us what",
               <>
-                what comes{" "}
+                you&apos;re working{" "}
                 <span className="text-[#e61e1e] font-light drop-shadow-[0_0_16px_rgba(255,25,25,0.45)]">
-                  next.
+                  on.
                 </span>
               </>,
             ]}
             className="text-[clamp(26px,3.6vw,56px)] tracking-[0.02em]"
           />
 
-          {/* Required Supporting Copy: "Have an idea in mind? Let's talk." */}
           <p
             data-anim="contact-copy"
             className="mt-[clamp(10px,1.4vw,22px)] text-[clamp(13.5px,1.3vw,20px)] font-extralight tracking-[0.02em] text-[#e2e2e2]"
           >
-            Have an idea in mind? Let&apos;s talk.
+            Share the idea, the goal and your timing. We&apos;ll reply with a clear next step.
           </p>
 
           {/* Accessible Live Region for Form Status Announcements */}
@@ -241,14 +260,13 @@ export const ContactSection = React.memo(function ContactSection({
                     className="w-2 h-2 rounded-full bg-[#ff2a2a] shadow-[0_0_8px_2px_rgba(255,35,35,0.9)]"
                   />
                   <span className="text-[11px] font-medium tracking-[0.24em] uppercase text-white">
-                    INQUIRY RECEIVED
+                    Message received
                   </span>
                 </div>
                 <p className="text-xs sm:text-sm font-light text-white/85 leading-relaxed">
                   Thank you,{" "}
                   <span className="text-white font-normal">{submittedName}</span>
-                  . Your project inquiry has been delivered directly to our studio team
-                  and we will respond shortly.
+                  . We have your message and will get back to you shortly.
                 </p>
                 <div className="flex flex-wrap items-center gap-4 pt-2">
                   <button
@@ -259,7 +277,7 @@ export const ContactSection = React.memo(function ContactSection({
                     }}
                     className="px-4 py-2 border border-white/20 bg-white/[0.04] hover:bg-white/[0.08] text-[10px] tracking-[0.22em] uppercase text-white transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm"
                   >
-                    SEND ANOTHER MESSAGE
+                    Send another message
                   </button>
                   <a
                     href={WHATSAPP_URL}
@@ -267,7 +285,7 @@ export const ContactSection = React.memo(function ContactSection({
                     rel="noopener noreferrer"
                     title="Chat on WhatsApp"
                     aria-label="Message VISYNTH on WhatsApp (opens in a new tab)"
-                    className="inline-flex items-center justify-center p-2 text-white/70 hover:text-[#25D366] transition-all duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#25D366] rounded-full hover:scale-110"
+                    className="inline-flex items-center justify-center p-2 text-white/70 hover:text-[#25D366] transition-[transform,opacity,color,background-color,border-color,box-shadow] duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#25D366] rounded-full hover:scale-110"
                   >
                     <WhatsAppIcon className="w-5 h-5" />
                   </a>
@@ -297,7 +315,7 @@ export const ContactSection = React.memo(function ContactSection({
                   <input
                     type="hidden"
                     name="subject"
-                    value="New Project Inquiry — VISYNTH"
+                    value="New project inquiry | VISYNTH"
                   />
                   <input
                     type="hidden"
@@ -321,7 +339,7 @@ export const ContactSection = React.memo(function ContactSection({
                   {/* Discipline Tags (Optional) */}
                   <div>
                     <span className="block text-[9px] font-mono tracking-[0.22em] uppercase text-white/60 mb-2">
-                      SELECT DISCIPLINES (OPTIONAL)
+                      What do you need? Optional
                     </span>
                     <div
                       role="group"
@@ -337,7 +355,7 @@ export const ContactSection = React.memo(function ContactSection({
                             disabled={isSubmitting}
                             aria-pressed={active}
                             onClick={() => toggleDiscipline(discipline)}
-                            className={`px-2.5 sm:px-3 py-1 text-[9px] sm:text-[9.5px] tracking-[0.18em] uppercase border transition-all cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#ff2a2a] disabled:opacity-50 rounded-sm ${
+                            className={`px-2.5 sm:px-3 py-1 text-[9px] sm:text-[9.5px] tracking-[0.18em] uppercase border transition-[transform,opacity,color,background-color,border-color,box-shadow] cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#ff2a2a] disabled:opacity-50 rounded-sm ${
                               active
                                 ? "border-[#ff2a2a] bg-[#ff2a2a]/20 text-white shadow-[0_0_12px_rgba(255,42,42,0.3)]"
                                 : "border-white/20 bg-white/[0.02] text-white/75 hover:border-white/45 hover:text-white"
@@ -357,46 +375,68 @@ export const ContactSection = React.memo(function ContactSection({
                         htmlFor="contact-name"
                         className="block text-[9px] font-mono tracking-[0.2em] uppercase text-white/70 mb-1"
                       >
-                        NAME <span className="text-[#ff3b3b]">*</span>
+                        Name <span className="text-[#ff3b3b]">*</span>
                       </label>
                       <input
+                        ref={nameRef}
                         id="contact-name"
                         name="name"
                         type="text"
+                        autoComplete="name"
                         required
                         disabled={isSubmitting}
                         value={name}
                         onChange={(e) => {
                           setName(e.target.value);
+                          if (fieldErrors.name) {
+                            setFieldErrors((current) => ({ ...current, name: undefined }));
+                          }
                           if (status === "error") setErrorMessage("");
                         }}
                         placeholder="Alex Mercer"
-                        aria-label="Your name"
-                        className="w-full bg-white/[0.04] border border-white/20 rounded-sm px-3.5 py-2 text-xs tracking-[0.08em] text-white placeholder:text-white/40 focus:border-[#ff2a2a] focus:ring-1 focus:ring-[#ff2a2a] focus:bg-black/60 focus:outline-none transition-all disabled:opacity-50"
+                        aria-invalid={Boolean(fieldErrors.name)}
+                        aria-describedby={fieldErrors.name ? "contact-name-error" : undefined}
+                        className="w-full bg-white/[0.04] border border-white/20 rounded-sm px-3.5 py-2 text-xs tracking-[0.08em] text-white placeholder:text-white/40 focus:border-[#ff2a2a] focus:ring-1 focus:ring-[#ff2a2a] focus:bg-black/60 focus:outline-none transition-[border-color,background-color,box-shadow,opacity] disabled:opacity-50"
                       />
+                      {fieldErrors.name && (
+                        <p id="contact-name-error" className="mt-1.5 text-[10px] leading-snug text-[#ff6b6b]">
+                          {fieldErrors.name}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label
                         htmlFor="contact-email"
                         className="block text-[9px] font-mono tracking-[0.2em] uppercase text-white/70 mb-1"
                       >
-                        EMAIL <span className="text-[#ff3b3b]">*</span>
+                        Email <span className="text-[#ff3b3b]">*</span>
                       </label>
                       <input
+                        ref={emailRef}
                         id="contact-email"
                         name="email"
                         type="email"
+                        autoComplete="email"
                         required
                         disabled={isSubmitting}
                         value={email}
                         onChange={(e) => {
                           setEmail(e.target.value);
+                          if (fieldErrors.email) {
+                            setFieldErrors((current) => ({ ...current, email: undefined }));
+                          }
                           if (status === "error") setErrorMessage("");
                         }}
                         placeholder="alex@company.com"
-                        aria-label="Your email"
-                        className="w-full bg-white/[0.04] border border-white/20 rounded-sm px-3.5 py-2 text-xs tracking-[0.08em] text-white placeholder:text-white/40 focus:border-[#ff2a2a] focus:ring-1 focus:ring-[#ff2a2a] focus:bg-black/60 focus:outline-none transition-all disabled:opacity-50"
+                        aria-invalid={Boolean(fieldErrors.email)}
+                        aria-describedby={fieldErrors.email ? "contact-email-error" : undefined}
+                        className="w-full bg-white/[0.04] border border-white/20 rounded-sm px-3.5 py-2 text-xs tracking-[0.08em] text-white placeholder:text-white/40 focus:border-[#ff2a2a] focus:ring-1 focus:ring-[#ff2a2a] focus:bg-black/60 focus:outline-none transition-[border-color,background-color,box-shadow,opacity] disabled:opacity-50"
                       />
+                      {fieldErrors.email && (
+                        <p id="contact-email-error" className="mt-1.5 text-[10px] leading-snug text-[#ff6b6b]">
+                          {fieldErrors.email}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -406,9 +446,10 @@ export const ContactSection = React.memo(function ContactSection({
                       htmlFor="contact-message"
                       className="block text-[9px] font-mono tracking-[0.2em] uppercase text-white/70 mb-1"
                     >
-                      PROJECT BRIEF <span className="text-[#ff3b3b]">*</span>
+                      Project brief <span className="text-[#ff3b3b]">*</span>
                     </label>
                     <textarea
+                      ref={messageRef}
                       id="contact-message"
                       name="message"
                       rows={3}
@@ -417,12 +458,21 @@ export const ContactSection = React.memo(function ContactSection({
                       value={message}
                       onChange={(e) => {
                         setMessage(e.target.value);
+                        if (fieldErrors.message) {
+                          setFieldErrors((current) => ({ ...current, message: undefined }));
+                        }
                         if (status === "error") setErrorMessage("");
                       }}
-                      placeholder="Tell us about your objectives, timeline, or scope..."
-                      aria-label="Project details"
-                      className="w-full bg-white/[0.04] border border-white/20 rounded-sm px-3.5 py-2 text-xs tracking-[0.06em] text-white placeholder:text-white/40 focus:border-[#ff2a2a] focus:ring-1 focus:ring-[#ff2a2a] focus:bg-black/60 focus:outline-none transition-all resize-none disabled:opacity-50"
+                      placeholder="What are you making, and what would you like help with?"
+                      aria-invalid={Boolean(fieldErrors.message)}
+                      aria-describedby={fieldErrors.message ? "contact-message-error" : undefined}
+                      className="w-full bg-white/[0.04] border border-white/20 rounded-sm px-3.5 py-2 text-xs tracking-[0.06em] text-white placeholder:text-white/40 focus:border-[#ff2a2a] focus:ring-1 focus:ring-[#ff2a2a] focus:bg-black/60 focus:outline-none transition-[border-color,background-color,box-shadow,opacity] resize-none disabled:opacity-50"
                     />
+                    {fieldErrors.message && (
+                      <p id="contact-message-error" className="mt-1.5 text-[10px] leading-snug text-[#ff6b6b]">
+                        {fieldErrors.message}
+                      </p>
+                    )}
                   </div>
 
                   {/* Visible Error Feedback (preserves entered data) */}
@@ -442,15 +492,15 @@ export const ContactSection = React.memo(function ContactSection({
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="inline-flex items-center justify-center gap-2.5 px-5 py-2.5 bg-[#e61e1e] hover:bg-[#ff2a2a] text-white text-[10px] font-semibold tracking-[0.24em] uppercase transition-all duration-300 shadow-[0_0_16px_rgba(230,30,30,0.35)] hover:shadow-[0_0_24px_rgba(255,42,42,0.55)] focus:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-sm disabled:opacity-50 disabled:pointer-events-none cursor-pointer self-start sm:self-auto"
+                      className="inline-flex items-center justify-center gap-2.5 px-5 py-2.5 bg-[#e61e1e] hover:bg-[#ff2a2a] text-white text-[10px] font-semibold tracking-[0.24em] uppercase transition-[transform,opacity,color,background-color,border-color,box-shadow] duration-300 shadow-[0_0_16px_rgba(230,30,30,0.35)] hover:shadow-[0_0_24px_rgba(255,42,42,0.55)] focus:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-sm disabled:opacity-50 disabled:pointer-events-none cursor-pointer self-start sm:self-auto"
                     >
                       <span>
-                        {isSubmitting ? "SENDING INQUIRY..." : "SEND INQUIRY"}
+                        {isSubmitting ? "Sending..." : "Send message"}
                       </span>
                       <CtaArrowIcon />
                     </button>
 
-                    {/* Secondary Social Action Logos: WHATSAPP & INSTAGRAM (No outline box) */}
+                    {/* Secondary Social Action Logos: WHATSAPP & INSTAGRAM with full 44px tap targets */}
                     <div className="flex items-center gap-3 self-start sm:self-auto">
                       <a
                         href={WHATSAPP_URL}
@@ -458,7 +508,7 @@ export const ContactSection = React.memo(function ContactSection({
                         rel="noopener noreferrer"
                         title="Chat on WhatsApp"
                         aria-label="Message VISYNTH on WhatsApp (opens in a new tab)"
-                        className="inline-flex items-center justify-center p-2 text-white/70 hover:text-[#25D366] transition-all duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#25D366] rounded-full hover:scale-110 cursor-pointer"
+                        className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] p-2.5 text-white/70 hover:text-[#25D366] transition-[transform,opacity,color,background-color,border-color,box-shadow] duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] rounded-full hover:scale-105 cursor-pointer"
                       >
                         <WhatsAppIcon className="w-5 h-5" />
                       </a>
@@ -469,7 +519,7 @@ export const ContactSection = React.memo(function ContactSection({
                         rel="noopener noreferrer"
                         title="Visit Instagram @visynth.official"
                         aria-label="Visit VISYNTH on Instagram @visynth.official (opens in a new tab)"
-                        className="inline-flex items-center justify-center p-2 text-white/70 hover:text-[#E4405F] transition-all duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#E4405F] rounded-full hover:scale-110 cursor-pointer"
+                        className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] p-2.5 text-white/70 hover:text-[#E4405F] transition-[transform,opacity,color,background-color,border-color,box-shadow] duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E4405F] rounded-full hover:scale-105 cursor-pointer"
                       >
                         <InstagramIcon className="w-5 h-5" />
                       </a>
@@ -482,25 +532,27 @@ export const ContactSection = React.memo(function ContactSection({
         </div>
       </div>
 
-      {/* Bottom Footer Bar with Identity, Socials, Legal Links, and Back to Top */}
+      {/* Studio footer with copyright, socials, legal links, and back to top */}
       <footer
         data-drag-ignore="true"
-        className="w-full py-4 sm:py-5 border-t border-white/[0.12] flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sm:gap-4 text-[9px] sm:text-[9.5px] tracking-[0.2em] uppercase text-white/65 shrink-0"
+        className="w-full py-4 sm:py-5 border-t border-white/[0.1] bg-black/60 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sm:gap-4 text-[10px] sm:text-[11px] font-mono tracking-[0.2em] uppercase text-white/70 shrink-0"
       >
-        <span className="text-white/70">
-          © 2026 VISYNTH — CREATIVE TECHNOLOGY STUDIO
-        </span>
+        <div className="flex items-center">
+          <span className="text-white/60 text-[9.5px]">
+            © 2026 VISYNTH STUDIO
+          </span>
+        </div>
 
-        <div className="flex flex-wrap items-center gap-x-4 sm:gap-x-6 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-1 sm:gap-x-2">
           <a
             href={WHATSAPP_URL}
             target="_blank"
             rel="noopener noreferrer"
             title="Chat on WhatsApp"
             aria-label="Chat with VISYNTH on WhatsApp (opens in a new tab)"
-            className="text-white/70 hover:text-[#25D366] transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-[#25D366] rounded-full p-1 hover:scale-110"
+            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 text-white/70 hover:text-[#25D366] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] rounded-full hover:scale-105"
           >
-            <WhatsAppIcon className="w-3.5 h-3.5" />
+            <WhatsAppIcon className="w-4 h-4" />
           </a>
           <a
             href={INSTAGRAM_URL}
@@ -508,21 +560,21 @@ export const ContactSection = React.memo(function ContactSection({
             rel="noopener noreferrer"
             title="Visit Instagram @visynth.official"
             aria-label="Visit VISYNTH on Instagram @visynth.official (opens in a new tab)"
-            className="text-white/70 hover:text-[#E4405F] transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-[#E4405F] rounded-full p-1 hover:scale-110"
+            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 text-white/70 hover:text-[#E4405F] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E4405F] rounded-full hover:scale-105"
           >
-            <InstagramIcon className="w-3.5 h-3.5" />
+            <InstagramIcon className="w-4 h-4" />
           </a>
           <Link
             href="/privacy-policy"
             prefetch={false}
-            className="text-white/50 hover:text-white transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm"
+            className="min-h-[44px] inline-flex items-center px-2.5 text-[9.5px] text-white/60 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-sm"
           >
             PRIVACY POLICY
           </Link>
           <Link
             href="/copyright"
             prefetch={false}
-            className="text-white/50 hover:text-white transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm"
+            className="min-h-[44px] inline-flex items-center px-2.5 text-[9.5px] text-white/60 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-sm"
           >
             COPYRIGHT
           </Link>
@@ -530,9 +582,9 @@ export const ContactSection = React.memo(function ContactSection({
             type="button"
             onClick={onReturnHome}
             aria-label="Scroll back to top of home page"
-            className="text-white/80 hover:text-white transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm"
+            className="min-h-[44px] inline-flex items-center px-3 text-[9.5px] text-white/85 hover:text-white transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-sm"
           >
-            BACK TO TOP ↑
+            Back to top ↑
           </button>
         </div>
       </footer>

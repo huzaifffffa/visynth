@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -17,29 +17,69 @@ export const NAV_ITEMS: { id: SectionId; label: string }[] = [
 interface SiteNavigationProps {
   activeSection?: SectionId;
   onNavigate?: (section: SectionId) => void;
-  isPortfolioPage?: boolean;
   isSubPage?: boolean;
 }
 
 export const SiteNavigation = React.memo(function SiteNavigation({
   activeSection,
   onNavigate,
-  isPortfolioPage = false,
   isSubPage = false,
 }: SiteNavigationProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const isExternalRoute = isPortfolioPage || isSubPage || !onNavigate;
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mobileDrawerRef = useRef<HTMLDivElement | null>(null);
+  const isExternalRoute = isSubPage || !onNavigate;
 
-  // Close mobile navigation on Escape key
+  // Treat the mobile drawer as a modal navigation surface: move focus in,
+  // keep background landmarks inert, and return focus on close.
   useEffect(() => {
     if (!mobileMenuOpen) return;
+
+    const inertTargets = Array.from(
+      document.querySelectorAll<HTMLElement>("main, footer")
+    ).filter((target) => !target.hasAttribute("inert"));
+    const menuButton = menuButtonRef.current;
+    inertTargets.forEach((target) => target.setAttribute("inert", ""));
+
+    const getFocusable = () =>
+      Array.from(
+        mobileDrawerRef.current?.querySelectorAll<HTMLElement>(
+          'a[href]:not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"])'
+        ) ?? []
+      );
+
+    const focusFrame = window.requestAnimationFrame(() => {
+      getFocusable()[0]?.focus();
+    });
+
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        e.preventDefault();
         setMobileMenuOpen(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const focusable = getFocusable();
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener("keydown", onKeyDown);
+      inertTargets.forEach((target) => target.removeAttribute("inert"));
+      if (document.contains(menuButton)) {
+        menuButton?.focus();
+      }
+    };
   }, [mobileMenuOpen]);
 
   const handleLinkClick = (
@@ -63,13 +103,14 @@ export const SiteNavigation = React.memo(function SiteNavigation({
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 w-full h-[clamp(64px,5.6vw,90px)] border-b border-white/[0.11] bg-gradient-to-b from-black/92 via-black/75 to-black/25 flex items-center justify-between pl-[5.8%] pr-[5.8%] select-none transform-gpu will-change-transform">
-      {/* Brand Logo (Left) — Preserved exactly */}
+    <header className="fixed top-0 left-0 right-0 z-50 w-full h-[clamp(64px,5.6vw,90px)] border-b border-white/[0.1] bg-black/45 backdrop-blur-xl flex items-center justify-between pl-[5.8%] pr-[5.8%] select-none transform-gpu will-change-transform shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.06)]">
+      {/* Brand Logo (Left) — Preserved exactly with WCAG tap target */}
       <Link
         href={isExternalRoute ? "/" : "#home"}
         prefetch={false}
         onClick={(e) => handleLinkClick(e, "home")}
-        className="relative flex items-center shrink-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm"
+        tabIndex={mobileMenuOpen ? -1 : undefined}
+        className="relative flex items-center min-h-[44px] min-w-[44px] shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-sm"
         aria-label="VISYNTH Home"
       >
         <Image
@@ -82,10 +123,10 @@ export const SiteNavigation = React.memo(function SiteNavigation({
         />
       </Link>
 
-      {/* Desktop Navigation Links (Centered) — Preserved exactly */}
+      {/* Desktop Navigation Links (Centered) — Preserved exactly with WCAG tap target */}
       <nav
         aria-label="Main Navigation"
-        className="hidden md:flex items-center gap-[clamp(22px,3.4vw,54px)] absolute left-1/2 -translate-x-1/2"
+        className="hidden md:flex items-center gap-[clamp(20px,3.2vw,50px)] absolute left-1/2 -translate-x-1/2"
       >
         {NAV_ITEMS.map((item) => {
           const isActive = !isExternalRoute && activeSection === item.id;
@@ -96,7 +137,7 @@ export const SiteNavigation = React.memo(function SiteNavigation({
               prefetch={false}
               onClick={(e) => handleLinkClick(e, item.id)}
               aria-current={isActive ? "page" : undefined}
-              className={`relative py-2 px-1 text-[clamp(9.5px,0.72vw,11.5px)] font-medium tracking-[0.22em] uppercase transition-colors duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm ${
+              className={`relative min-h-[44px] inline-flex items-center px-2 text-[clamp(10px,0.72vw,12px)] font-medium tracking-[0.22em] uppercase transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-sm ${
                 isActive ? "text-white" : "text-[#c8c8c8] hover:text-white"
               }`}
             >
@@ -105,7 +146,7 @@ export const SiteNavigation = React.memo(function SiteNavigation({
               {/* Active Red Glow Indicator */}
               <span
                 aria-hidden="true"
-                className={`pointer-events-none absolute left-1/2 -translate-x-1/2 -bottom-[clamp(6px,0.65vw,10px)] flex items-center justify-center w-[clamp(40px,4.2vw,60px)] transition-opacity duration-300 will-change-[opacity] ${
+                className={`pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-1.5 flex items-center justify-center w-[clamp(40px,4.2vw,60px)] transition-opacity duration-300 will-change-[opacity] ${
                   isActive ? "opacity-100" : "opacity-0"
                 }`}
               >
@@ -118,37 +159,17 @@ export const SiteNavigation = React.memo(function SiteNavigation({
         })}
       </nav>
 
-      {/* Right Action Area: Clearly visible PORTFOLIO button at far right */}
+      {/* Right Action Area: Mobile Navigation Toggle */}
       <div className="flex items-center gap-3">
-        <Link
-          href="/portfolio"
-          prefetch={false}
-          aria-current={isPortfolioPage ? "page" : undefined}
-          className={`relative inline-flex items-center justify-center py-2 px-1 text-[clamp(9.5px,0.72vw,11.5px)] font-medium tracking-[0.22em] uppercase transition-colors duration-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/80 rounded-sm ${
-            isPortfolioPage
-              ? "text-white"
-              : "text-white/80 hover:text-white"
-          }`}
-        >
-          <span>PORTFOLIO</span>
-          <span
-            aria-hidden="true"
-            className={`ml-2 w-1.5 h-1.5 rounded-full transition-all duration-300 ${
-              isPortfolioPage
-                ? "bg-[#ff3b3b] shadow-[0_0_8px_2px_rgba(255,35,35,0.95)]"
-                : "bg-[#ff2a2a]/80 shadow-[0_0_6px_1px_rgba(255,35,35,0.6)]"
-            }`}
-          />
-        </Link>
-
         {/* Mobile Navigation Toggle */}
         <button
+          ref={menuButtonRef}
           type="button"
           onClick={() => setMobileMenuOpen((prev) => !prev)}
           aria-expanded={mobileMenuOpen}
           aria-controls="mobile-navigation-drawer"
           aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
-          className="md:hidden relative z-50 flex flex-col justify-center items-center w-9 h-9 gap-1.5 text-white/85 hover:text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/80 rounded-sm cursor-pointer"
+          className="md:hidden relative z-50 flex flex-col justify-center items-center min-w-[44px] min-h-[44px] w-11 h-11 gap-1.5 text-white/85 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-sm cursor-pointer"
         >
           <span
             className={`block w-5 h-[1px] bg-current transition-transform duration-300 ${
@@ -170,10 +191,14 @@ export const SiteNavigation = React.memo(function SiteNavigation({
 
       {/* Mobile Dropdown Drawer */}
       <div
+        ref={mobileDrawerRef}
         id="mobile-navigation-drawer"
         data-drag-ignore="true"
+        role="dialog"
+        aria-modal={mobileMenuOpen ? "true" : undefined}
+        aria-label="Site navigation"
         aria-hidden={!mobileMenuOpen}
-        className={`md:hidden fixed inset-x-0 top-[clamp(64px,5.6vw,90px)] bg-black/95 border-b border-white/10 transition-all duration-300 overflow-hidden ${
+        className={`md:hidden fixed inset-x-0 top-[clamp(64px,5.6vw,90px)] bg-black/95 border-b border-white/10 transition-[max-height,opacity,padding] duration-300 overflow-hidden ${
           mobileMenuOpen
             ? "max-h-96 opacity-100 py-6 pointer-events-auto backdrop-blur-md"
             : "max-h-0 opacity-0 py-0 pointer-events-none"
@@ -191,14 +216,15 @@ export const SiteNavigation = React.memo(function SiteNavigation({
                 href={getSectionHref(item.id)}
                 prefetch={false}
                 onClick={(e) => handleLinkClick(e, item.id)}
+                tabIndex={mobileMenuOpen ? 0 : -1}
                 aria-current={isActive ? "page" : undefined}
-                className={`flex items-center gap-3 text-xs tracking-[0.24em] uppercase py-1.5 px-1 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm ${
+                className={`flex items-center gap-3 text-xs tracking-[0.24em] uppercase min-h-[44px] py-1.5 px-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-sm ${
                   isActive ? "text-white font-semibold" : "text-white/70 hover:text-white"
                 }`}
               >
                 <span
                   aria-hidden="true"
-                  className={`w-1.5 h-1.5 rounded-full transition-all ${
+                  className={`w-1.5 h-1.5 rounded-full transition-[transform,opacity,color,background-color,border-color,box-shadow] ${
                     isActive
                       ? "bg-[#ff2a2a] shadow-[0_0_8px_2px_rgba(255,35,35,0.9)]"
                       : "bg-white/25"
@@ -208,21 +234,6 @@ export const SiteNavigation = React.memo(function SiteNavigation({
               </Link>
             );
           })}
-          <Link
-            href="/portfolio"
-            prefetch={false}
-            onClick={() => setMobileMenuOpen(false)}
-            aria-current={isPortfolioPage ? "page" : undefined}
-            className={`flex items-center gap-3 text-xs tracking-[0.24em] uppercase py-1.5 px-1 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-500/70 rounded-sm ${
-              isPortfolioPage ? "text-white font-semibold" : "text-[#ff4d4d] hover:text-white"
-            }`}
-          >
-            <span
-              aria-hidden="true"
-              className="w-1.5 h-1.5 rounded-full bg-[#ff2a2a] shadow-[0_0_8px_2px_rgba(255,35,35,0.9)]"
-            />
-            PORTFOLIO
-          </Link>
         </nav>
       </div>
     </header>

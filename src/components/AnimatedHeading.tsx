@@ -14,7 +14,7 @@ export function SectionEyebrow({ label, className = "" }: SectionEyebrowProps) {
         data-anim="eyebrow-text"
         className="text-[clamp(8.5px,0.72vw,11.5px)] font-normal tracking-[0.31em] text-[#adadad] uppercase whitespace-nowrap"
       >
-        {label}
+        {label.replace(/^\d+\s*\/\s*/, "")}
       </span>
       <span
         data-anim="eyebrow-line"

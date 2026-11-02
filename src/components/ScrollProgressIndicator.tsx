@@ -48,11 +48,11 @@ export const ScrollProgressIndicator = React.memo(function ScrollProgressIndicat
               title={item.label}
               aria-label={`Scroll to ${item.label} section`}
               aria-current={isActive ? "true" : undefined}
-              className="group p-1 flex items-center justify-center rounded-full cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#ff2a2a]"
+              className="group min-w-[36px] min-h-[36px] flex items-center justify-center rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff2a2a]"
             >
               <span
                 aria-hidden="true"
-                className={`block rounded-full transition-all duration-300 ${
+                className={`block rounded-full transition-[transform,opacity,color,background-color,border-color,box-shadow] duration-300 ${
                   isActive
                     ? "w-1.5 h-1.5 bg-[#ff2a2a] shadow-[0_0_8px_2px_rgba(255,35,35,0.9)]"
                     : "w-1 h-1 bg-white/35 group-hover:bg-white/75"

@@ -1,19 +1,17 @@
 import type { Metadata, Viewport } from "next";
-import { Montserrat } from "next/font/google";
-import { SitePreloader } from "@/components/SitePreloader";
+import { Instrument_Sans } from "next/font/google";
 import "./globals.css";
+import { SmoothScrollProvider } from "@/components/SmoothScrollProvider";
 
-const montserrat = Montserrat({
-  variable: "--font-montserrat",
+const instrumentSans = Instrument_Sans({
+  variable: "--font-studio",
   subsets: ["latin"],
-  weight: ["200", "300", "400", "500", "600", "700"],
   display: "swap",
 });
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
   themeColor: "#000000",
 };
 
@@ -22,18 +20,18 @@ const SITE_URL = "https://visynth-seven.vercel.app";
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "VISYNTH — Creative Technology Studio",
-    template: "%s — VISYNTH",
+    default: "VISYNTH | Design and Web Studio",
+    template: "%s VISYNTH",
   },
   description:
-    "We build distinctive brands, digital experiences, and intelligent technology—from branding and 3D animation to web, app, marketing, and cybersecurity solutions.",
+    "VISYNTH designs visual identities, 3D work, websites and digital products.",
   alternates: {
     canonical: "/",
   },
   openGraph: {
-    title: "VISYNTH — Creative Technology Studio",
+    title: "VISYNTH Design and Web Studio",
     description:
-      "Where vision becomes growth. Distinctive brands, cinematic 3D motion, creative web engineering, and intelligent cybersecurity.",
+      "Visual identity, 3D work, websites and digital products from one independent studio.",
     url: SITE_URL,
     siteName: "VISYNTH",
     locale: "en_US",
@@ -43,15 +41,15 @@ export const metadata: Metadata = {
         url: "/portfolio/work-02.webp",
         width: 800,
         height: 1040,
-        alt: "VISYNTH — Signature Studio Creative Visual",
+        alt: "VISYNTH studio visual",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "VISYNTH — Creative Technology Studio",
+    title: "VISYNTH Design and Web Studio",
     description:
-      "Where vision becomes growth. Distinctive brands, cinematic 3D motion, creative web engineering, and intelligent cybersecurity.",
+      "Visual identity, 3D work, websites and digital products from one independent studio.",
     images: ["/portfolio/work-02.webp"],
   },
   icons: {
@@ -74,7 +72,7 @@ const STRUCTURED_DATA = {
   url: SITE_URL,
   logo: `${SITE_URL}/visynth-logo.png`,
   description:
-    "Creative technology studio specializing in branding, 3D animation, web and application development, digital marketing, and cybersecurity.",
+    "Independent studio for visual identity, 3D work, websites and digital products.",
   sameAs: [
     "https://www.instagram.com/visynth.official/",
   ],
@@ -89,18 +87,34 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${montserrat.variable} h-full antialiased bg-black text-white`}
+      className={`${instrumentSans.variable} h-full antialiased bg-black text-white`}
     >
       <body
         suppressHydrationWarning
-        className="min-h-full bg-[#000000] text-white font-sans selection:bg-red-600/30 selection:text-white overflow-x-hidden"
+        className="min-h-full bg-[#000000] text-white font-sans selection:bg-red-600/30 selection:text-white overflow-x-clip"
       >
+        <a
+          href="#main-content"
+          className="fixed left-4 top-4 z-[10000] -translate-y-24 bg-white px-4 py-3 text-sm font-semibold text-black transition-transform duration-200 focus:translate-y-0"
+        >
+          Skip to main content
+        </a>
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{if(sessionStorage.getItem('visynth_preload_complete')==='true')document.documentElement.classList.add('visynth-preloaded')}catch(e){}",
+          }}
+        />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }}
         />
-        <SitePreloader />
-        <div id="visynth-app-content">{children}</div>
+        <SmoothScrollProvider>
+          <div id="visynth-app-content">{children}</div>
+        </SmoothScrollProvider>
+        <noscript>
+          <style>{`[data-testid="site-preloader"]{display:none!important}html,body{overflow:auto!important}#main-content{height:auto!important;overflow:visible!important}#home,#skills,#work,#about,#contact{position:relative!important;inset:auto!important;height:auto!important;min-height:70vh;opacity:1!important;visibility:visible!important;pointer-events:auto!important;padding-top:100px;padding-bottom:40px}#work{display:none}#mobile-navigation-drawer{display:none!important}`}</style>
+        </noscript>
       </body>
     </html>
   );

@@ -16,10 +16,15 @@ export interface PortfolioItem {
   discipline: string;
   serviceProvided: string;
   projectObjective: string;
-  projectType: "Concept Study" | "Experimental Exploration" | "Studio Project";
+  projectType: "Concept study" | "Experimental study" | "Studio project";
   description: string;
   imageSrc: string;
   imageAlt: string;
+  videoSrc?: string;
+  galleryImages?: string[];
+  cleanCard?: boolean;
+  externalUrl?: string;
+  externalLabel?: string;
   width: number;
   height: number;
 }
@@ -38,16 +43,61 @@ export const DISCIPLINE_CATEGORIES: PortfolioCategory[] = [
 
 export const PORTFOLIO_ITEMS: PortfolioItem[] = [
   {
+    id: "work-procida",
+    title: "Procida Coastal Dining",
+    category: "Video Editing",
+    discipline: "Commercial Film Direction, Edit & Color Grading",
+    serviceProvided: "Brand Film Production, Sound Design & Visual Storytelling",
+    projectObjective:
+      "Capture the coastal Neapolitan and Sicilian soul of Procida Restaurant through intimate culinary cinematography, rhythmic editorial pacing, and warm Mediterranean color grading.",
+    projectType: "Studio project",
+    description:
+      "Bespoke brand film created for Procida Restaurant (New Orleans)—showcasing handcrafted coastal Italian cuisine, artisanal pasta preparation, and warm volcanic-island hospitality through dynamic motion and rich sensory grading.",
+    imageSrc: "/portfolio/work-01.webp",
+    imageAlt:
+      "Cinematic culinary brand film for Procida Italian Restaurant",
+    videoSrc: "/portfolio/procida.mp4",
+    externalUrl: "https://procidarestaurant.com/",
+    externalLabel: "Visit Procida",
+    width: 1080,
+    height: 1920,
+  },
+  {
+    id: "work-aume",
+    title: "AUMÉ Naturals — Purity Meets Prestige",
+    category: "Branding",
+    discipline: "AI Content Creation, Brand Direction & Editorial Design",
+    serviceProvided: "Campaign Visual Suite, Product Art Direction & Social Creatives",
+    projectObjective:
+      "Elevate AUMÉ Naturals' 12-ingredient botanical Hair Treatment Oil into a quiet-luxury personal care ritual through editorial campaign imagery, tactile typography, and cohesive art direction.",
+    projectType: "Studio project",
+    description:
+      "Complete visual campaign suite crafted for AUMÉ Naturals (aumenaturals.com) highlighting their signature 12-oil botanical Hair Treatment Oil. Built around deep forest greens, warm apothecary amber glass, and refined serif typography under the brand ethos 'Where Purity Meets Prestige — A Ritual, Not a Routine.'",
+    imageSrc: "/portfolio/aume-1.png",
+    imageAlt:
+      "AUMÉ Naturals Hair Treatment Oil editorial campaign poster — Where Purity Meets Prestige",
+    galleryImages: [
+      "/portfolio/aume-1.png",
+      "/portfolio/aume-2.png",
+      "/portfolio/aume-3.png",
+    ],
+    cleanCard: true,
+    externalUrl: "https://aumenaturals.com/",
+    externalLabel: "Visit AUMÉ Naturals",
+    width: 1080,
+    height: 1350,
+  },
+  {
     id: "work-01",
     title: "Obsidian Sentinel Study",
     category: "3D Models",
-    discipline: "3D Asset Modeling & Surfacing",
-    serviceProvided: "High-Poly Hard Surface Modeling & Material Development",
+    discipline: "3D modelling and surface design",
+    serviceProvided: "Hard-surface model and material study",
     projectObjective:
-      "Explore reflective obsidian textures, micro-bevel highlights, and concentrated crimson visor illumination for high-end cinematic rendering.",
-    projectType: "Experimental Exploration",
+      "Develop a hard-surface character study with controlled reflections, crisp edge highlights and a focused red visor.",
+    projectType: "Experimental study",
     description:
-      "Hard-surface 3D model study exploring reflective obsidian materials, specular chrome highlights, and concentrated crimson visor illumination.",
+      "A hard-surface character study focused on black reflective materials, chrome edges and a single red visor.",
     imageSrc: "/portfolio/work-01.webp",
     imageAlt:
       "Futuristic reflective black android with a glowing crimson visor against a dark void",
@@ -58,13 +108,13 @@ export const PORTFOLIO_ITEMS: PortfolioItem[] = [
     id: "work-07",
     title: "Acoustic & Optical Sensor Study",
     category: "Character Design",
-    discipline: "Sci-Fi Character Concept & Hard-Surface Detailing",
-    serviceProvided: "Character Form Exploration & Industrial Detailing",
+    discipline: "Character concept and hard-surface detail",
+    serviceProvided: "Form development and industrial detailing",
     projectObjective:
-      "Develop a distinctive helmet silhouette balancing ergonomic proportions with integrated communication and optical hardware.",
-    projectType: "Concept Study",
+      "Shape a clear helmet silhouette that combines believable proportions with integrated optical and communication hardware.",
+    projectType: "Concept study",
     description:
-      "Cybernetic character profile and helmet study focusing on precision-machined dark alloy and crimson optical ring accents.",
+      "A cybernetic helmet study built around machined dark metal and a restrained red optical detail.",
     imageSrc: "/portfolio/work-07.webp",
     imageAlt:
       "Side profile close-up of a sleek black helmet with a glowing red circular side module",
@@ -75,13 +125,13 @@ export const PORTFOLIO_ITEMS: PortfolioItem[] = [
     id: "work-02",
     title: "Crimson Threshold",
     category: "Branding",
-    discipline: "Brand Identity & Visual Language",
-    serviceProvided: "Visual Identity System & Environmental Key Visuals",
+    discipline: "Brand identity and visual language",
+    serviceProvided: "Identity system and key visuals",
     projectObjective:
-      "Establish the signature architectural aesthetic for VISYNTH—juxtaposing brutalist dark monoliths with a luminous crimson focal portal.",
-    projectType: "Studio Project",
+      "Define a recognizable VISYNTH visual language using dark architectural forms and a single red focal point.",
+    projectType: "Studio project",
     description:
-      "Signature visual direction for the VISYNTH studio identity—contrasting architectural monoliths with a luminous crimson ring.",
+      "A VISYNTH identity study built around dark architectural forms and a red circular portal.",
     imageSrc: "/portfolio/work-02.webp",
     imageAlt:
       "Silhouette approaching a glowing red circular portal over wet reflective stone",
@@ -92,13 +142,13 @@ export const PORTFOLIO_ITEMS: PortfolioItem[] = [
     id: "work-03",
     title: "Momentum in Red Ink",
     category: "Graphic Design",
-    discipline: "Editorial Illustration & Expressive Linework",
-    serviceProvided: "Custom Visual Art & Symbolic Narrative Illustration",
+    discipline: "Editorial illustration and linework",
+    serviceProvided: "Original artwork and narrative illustration",
     projectObjective:
-      "Illustrate the human struggle of pushing creative and technical limits through minimalist monochrome sketches and energetic red ink.",
-    projectType: "Concept Study",
+      "Show the effort behind difficult creative work through a simple figure, a steep incline and an unruly red form.",
+    projectType: "Concept study",
     description:
-      "Hand-drawn ink and crimson line study illustrating disciplined creative effort pushing complex form uphill.",
+      "A hand-drawn study about the persistence it takes to move a difficult idea forward.",
     imageSrc: "/portfolio/work-03.webp",
     imageAlt:
       "Minimalist hand-drawn figure pushing a large tangled red sphere up an incline",
@@ -109,13 +159,13 @@ export const PORTFOLIO_ITEMS: PortfolioItem[] = [
     id: "work-04",
     title: "Optical Core Architecture",
     category: "Video Editing",
-    discipline: "Motion Graphics & Color Grading",
-    serviceProvided: "Rhythmic Sequence Editing & Dynamic LUT Grading",
+    discipline: "Motion graphics and colour grading",
+    serviceProvided: "Sequence editing and colour treatment",
     projectObjective:
-      "Sequence rapid focal shifts and rhythmic cut intervals that draw the viewer's eye into the concentric mechanical core.",
-    projectType: "Experimental Exploration",
+      "Use pacing, focal changes and colour to pull attention toward the centre of a mechanical form.",
+    projectType: "Experimental study",
     description:
-      "Rhythmic cut and colour-grading sequence exploring layered perimeter rings and radial neural filaments.",
+      "A motion study using rhythmic cuts, concentric rings and controlled red highlights.",
     imageSrc: "/portfolio/work-04.webp",
     imageAlt:
       "Close-up of a circular mechanical core with glowing red concentric rings and filaments",
@@ -126,13 +176,13 @@ export const PORTFOLIO_ITEMS: PortfolioItem[] = [
     id: "work-05",
     title: "Nocturnal Transit System",
     category: "3D Animation",
-    discipline: "3D Environment & Spatial Lighting",
-    serviceProvided: "Subterranean Environment Layout & Cinematic Lighting Setup",
+    discipline: "3D environment and spatial lighting",
+    serviceProvided: "Environment layout and lighting",
     projectObjective:
-      "Simulate spatial depth and moody atmospheric reflections using linear crimson light bars on damp subterranean tiled architecture.",
-    projectType: "Studio Project",
+      "Create a believable underground space using simple geometry, damp surfaces and linear red lighting.",
+    projectType: "Studio project",
     description:
-      "Realtime spatial 3D animation study pairing linear crimson ceiling fixtures with wet tiled platform reflections.",
+      "A real-time 3D environment study of an underground platform lit by red ceiling strips.",
     imageSrc: "/portfolio/work-05.webp",
     imageAlt:
       "Futuristic subterranean transit station illuminated by red neon ceiling strips",
@@ -143,13 +193,13 @@ export const PORTFOLIO_ITEMS: PortfolioItem[] = [
     id: "work-06",
     title: "Radial Signal Convergence",
     category: "Website Development",
-    discipline: "Creative Web Engineering",
-    serviceProvided: "Interactive Canvas Shader & Scroll-Bound Render Architecture",
+    discipline: "Creative web development",
+    serviceProvided: "Interactive canvas and scroll-led animation",
     projectObjective:
-      "Engineer 60fps scroll-driven WebP playback on a GPU canvas without dropped frames across mobile and desktop displays.",
-    projectType: "Studio Project",
+      "Build a scroll-led canvas sequence that stays responsive across desktop and mobile layouts.",
+    projectType: "Studio project",
     description:
-      "High-contrast interactive web canvas sequence engineered for scroll-synchronized browser playback.",
+      "An interactive web sequence that connects page movement to a high-contrast canvas animation.",
     imageSrc: "/portfolio/work-06.webp",
     imageAlt:
       "Radial burst of crimson light filaments converging toward a dark center",
@@ -160,13 +210,13 @@ export const PORTFOLIO_ITEMS: PortfolioItem[] = [
     id: "work-08",
     title: "Structural Thread Synthesis",
     category: "Graphic Design",
-    discipline: "Digital Print & Vector Graphics",
-    serviceProvided: "Generative Pattern Design & Precision Vector Composition",
+    discipline: "Digital print and vector graphics",
+    serviceProvided: "Pattern design and vector composition",
     projectObjective:
-      "Investigate how rigid geometric grid lines can dissolve organically into hand-drawn organic thread textures.",
-    projectType: "Experimental Exploration",
+      "Explore the point where a rigid digital grid gives way to loose, hand-drawn texture.",
+    projectType: "Experimental study",
     description:
-      "Transitional illustration study bridging procedural energy filaments and expressive hand-drawn red linework.",
+      "An illustration study that moves from precise digital lines into a dense, hand-drawn red form.",
     imageSrc: "/portfolio/work-08.webp",
     imageAlt:
       "Luminous red filaments weaving into a dense hand-drawn crimson sphere",
@@ -177,13 +227,13 @@ export const PORTFOLIO_ITEMS: PortfolioItem[] = [
     id: "work-09",
     title: "Reflective Corridor Grid",
     category: "UI/UX Design",
-    discipline: "Spatial Design & Dark-Mode Visual Hierarchy",
-    serviceProvided: "Interface Elevation Systems & High-Contrast Visual Standards",
+    discipline: "Spatial design and dark interface hierarchy",
+    serviceProvided: "Interface depth and contrast system",
     projectObjective:
-      "Establish contrast ratios and lighting cues for deep-black interfaces that preserve readability without eye strain in dark environments.",
-    projectType: "Studio Project",
+      "Test how contrast, depth and red lighting cues can guide attention in a dark interface.",
+    projectType: "Studio project",
     description:
-      "Spatial perspective grid and dark-mode visual hierarchy study informing VISYNTH's interactive interface system.",
+      "A dark interface study using perspective, reflection and red light to establish hierarchy.",
     imageSrc: "/portfolio/work-09.webp",
     imageAlt:
       "Perspective view of a dark transit car alongside a crimson-reflected platform floor",
